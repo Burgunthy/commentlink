@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get('state')
   const errorParam = searchParams.get('error')
 
-  const CLIENT_ID = getEnv('META_APP_ID')
+  const CLIENT_ID = getEnv('INSTAGRAM_CLIENT_ID')
   const APP_SECRET = getEnv('META_APP_SECRET')
   const APP_URL = getEnv('NEXT_PUBLIC_APP_URL')
   const REDIRECT_URI = `${APP_URL}/api/auth/instagram/callback`
@@ -34,9 +34,18 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // 1. Exchange code for short-lived access token via Facebook Graph API
-    const tokenUrl = `https://graph.facebook.com/v25.0/oauth/access_token?client_id=${CLIENT_ID}&client_secret=${APP_SECRET}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&code=${code}`
-    const tokenResp = await fetch(tokenUrl)
+    // 1. Exchange code for short-lived access token (Instagram Business Login)
+    const tokenResp = await fetch('https://api.instagram.com/oauth/access_token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: CLIENT_ID,
+        client_secret: APP_SECRET,
+        grant_type: 'authorization_code',
+        redirect_uri: REDIRECT_URI,
+        code,
+      }),
+    })
     const tokenData = await tokenResp.json()
 
     if (!tokenResp.ok || !tokenData.access_token) {
