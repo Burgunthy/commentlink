@@ -52,7 +52,8 @@ export async function GET(request: NextRequest) {
 
     if (!tokenResp.ok || !tokenData.access_token) {
       console.error('[ig callback] Token exchange failed:', JSON.stringify(tokenData))
-      return NextResponse.redirect(new URL('/dashboard/accounts?error=token_failed', request.url))
+      const errMsg = encodeURIComponent(JSON.stringify(tokenData))
+      return NextResponse.redirect(new URL(`/dashboard/accounts?error=token_failed&detail=${errMsg}`, request.url))
     }
 
     const shortToken = tokenData.access_token
