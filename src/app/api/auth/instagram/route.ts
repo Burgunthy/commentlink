@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
     enable_fb_login: '1',
     client_id: CLIENT_ID,
     logger_id: loggerId,
+    state: state,
   })
 
   const nextPath = `/oauth/authorize/third_party/?${authorizeParams.toString()}`

@@ -18,10 +18,10 @@ export async function GET(request: NextRequest) {
   const APP_URL = getEnv('NEXT_PUBLIC_APP_URL')
   const REDIRECT_URI = `${APP_URL}/api/auth/instagram/callback`
 
-  // CSRF state check — Instagram OAuth generates its own state via the login flow.
-  // We can't match it with our cookie, so we only verify a state was returned.
-  // The cookie-based CSRF is enforced by the browser same-origin policy on the redirect chain.
-  if (!state) {
+  // Check CSRF state
+  const savedState = request.cookies.get('ig_oauth_state')?.value
+  if (!state || !savedState || state !== savedState) {
+    console.error('[ig callback] State mismatch:', { state, savedState, cookies: request.cookies.getAll().map(c => c.name) })
     return NextResponse.redirect(new URL('/dashboard/accounts?error=invalid_state', request.url))
   }
 
