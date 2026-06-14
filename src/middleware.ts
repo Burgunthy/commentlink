@@ -1,11 +1,30 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { createMiddlewareClient } from '@/lib/supabase/server'
 
-// TODO: Enable Supabase auth once keys are configured
-// import { createServerClient } from '@supabase/ssr'
+const protectedPaths = ['/dashboard']
 
 export async function middleware(request: NextRequest) {
-  // Pass through — auth guard enabled after Supabase keys are set
+  const { pathname } = request.nextUrl
+
+  // Allow auth routes and public routes
+  if (pathname.startsWith('/auth') || pathname === '/' || pathname.startsWith('/api')) {
+    return NextResponse.next({ request })
+  }
+
+  // Protect dashboard routes
+  if (protectedPaths.some(p => pathname.startsWith(p))) {
+    const supabase = createMiddlewareClient(request)
+
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (!session) {
+      const redirectUrl = new URL('/auth/login', request.url)
+      redirectUrl.searchParams.set('redirectTo', pathname)
+      return NextResponse.redirect(redirectUrl)
+    }
+  }
+
   return NextResponse.next({ request })
 }
 
