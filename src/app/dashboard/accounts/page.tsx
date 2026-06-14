@@ -35,7 +35,10 @@ interface Account {
 export default function AccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
-  const [searchParams] = useState(() => new URLSearchParams(window.location.search))
+  const [searchParams] = useState(() => {
+  if (typeof window === 'undefined') return new URLSearchParams()
+  return new URLSearchParams(window.location.search)
+})
 
   useEffect(() => {
     // Clear URL params on mount
