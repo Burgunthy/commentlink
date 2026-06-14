@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get('state')
   const errorParam = searchParams.get('error')
 
-  const CLIENT_ID = getEnv('INSTAGRAM_CLIENT_ID')
+  const CLIENT_ID = getEnv('META_APP_ID')
   const APP_SECRET = getEnv('META_APP_SECRET')
   const APP_URL = getEnv('NEXT_PUBLIC_APP_URL')
   const REDIRECT_URI = `${APP_URL}/api/auth/instagram/callback`
@@ -34,19 +34,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // 1. Exchange code for short-lived access token (Instagram Business Login)
-    // Response includes user_id directly — no need for me/accounts
-    const tokenResp = await fetch('https://api.instagram.com/oauth/access_token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: CLIENT_ID,
-        client_secret: APP_SECRET,
-        grant_type: 'authorization_code',
-        redirect_uri: REDIRECT_URI,
-        code,
-      }),
-    })
+    // 1. Exchange code for short-lived access token via Facebook Graph API
+    const tokenUrl = `https://graph.facebook.com/v25.0/oauth/access_token?client_id=${CLIENT_ID}&client_secret=${APP_SECRET}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&code=${code}`
+    const tokenResp = await fetch(tokenUrl)
     const tokenData = await tokenResp.json()
 
     if (!tokenResp.ok || !tokenData.access_token) {
@@ -55,32 +45,46 @@ export async function GET(request: NextRequest) {
     }
 
     const shortToken = tokenData.access_token
-    const igUserId = tokenData.user_id
 
-    if (!igUserId) {
-      console.error('[ig callback] No user_id in token response:', JSON.stringify(tokenData))
-      return NextResponse.redirect(new URL('/dashboard/accounts?error=token_failed', request.url))
-    }
-
-    // 2. Exchange for long-lived token (60 days) via Graph API
+    // 2. Exchange for long-lived token (60 days)
     const longResp = await fetch(
       `https://graph.facebook.com/v25.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${CLIENT_ID}&client_secret=${APP_SECRET}&fb_exchange_token=${shortToken}`
     )
     const longData = await longResp.json()
     const longToken = longData.access_token || shortToken
 
-    // 3. Get Instagram user details directly (no me/accounts needed)
-    const igDetailResp = await fetch(
-      `https://graph.facebook.com/v25.0/${igUserId}?fields=id,username,name,profile_picture_url,followers_count,media_count&access_token=${longToken}`
+    // 3. Get Facebook Pages with Instagram Business accounts
+    const pagesResp = await fetch(
+      `https://graph.facebook.com/v25.0/me/accounts?fields=instagram_business_account{id,username,name,profile_picture_url}&access_token=${longToken}`
     )
-    const igDetail = await igDetailResp.json()
+    const pagesData = await pagesResp.json()
 
-    if (igDetail.error) {
-      console.error('[ig callback] IG detail failed:', JSON.stringify(igDetail))
+    if (!pagesData.data?.length) {
+      console.error('[ig callback] No Facebook Pages found:', JSON.stringify(pagesData))
       return NextResponse.redirect(new URL('/dashboard/accounts?error=no_ig_account', request.url))
     }
 
-    // 4. Get current user session
+    // Find first page with IG Business account
+    let igAccount = null
+    for (const page of pagesData.data) {
+      if (page.instagram_business_account) {
+        igAccount = page.instagram_business_account
+        break
+      }
+    }
+
+    if (!igAccount) {
+      console.error('[ig callback] No IG business account on any page')
+      return NextResponse.redirect(new URL('/dashboard/accounts?error=no_ig_account', request.url))
+    }
+
+    // 4. Get Instagram user details
+    const igDetailResp = await fetch(
+      `https://graph.facebook.com/v25.0/${igAccount.id}?fields=id,username,name,profile_picture_url,followers_count,media_count&access_token=${longToken}`
+    )
+    const igDetail = await igDetailResp.json()
+
+    // 5. Get current user session
     const supabase = await createClient()
     const { data: { session } } = await supabase.auth.getSession()
 
@@ -88,11 +92,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/auth/login', request.url))
     }
 
-    // 5. Save to database
+    // 6. Save to database
     const { error: dbError } = await supabase.from('accounts').upsert({
       user_id: session.user.id,
-      ig_id: String(igUserId),
-      ig_username: igDetail.username || '',
+      ig_id: String(igAccount.id),
+      ig_username: igDetail.username || igAccount.username || '',
       access_token: longToken,
     }, { onConflict: 'ig_id' })
 

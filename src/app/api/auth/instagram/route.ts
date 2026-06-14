@@ -6,9 +6,10 @@ function getEnv(key: string): string {
   return val
 }
 
-// GET /api/auth/instagram — redirect to Instagram Business Login
+// GET /api/auth/instagram — redirect to Facebook Login (Instagram Business Login)
+// Instagram Business API requires Facebook Login, NOT Instagram Login
 export async function GET(request: NextRequest) {
-  const CLIENT_ID = getEnv('INSTAGRAM_CLIENT_ID')
+  const CLIENT_ID = getEnv('META_APP_ID')
   const APP_URL = getEnv('NEXT_PUBLIC_APP_URL')
   const REDIRECT_URI = `${APP_URL}/api/auth/instagram/callback`
 
@@ -18,11 +19,13 @@ export async function GET(request: NextRequest) {
     'instagram_business_manage_comments',
     'instagram_business_content_publish',
     'instagram_business_manage_insights',
+    'pages_show_list',
+    'pages_read_engagement',
   ].join(',')
 
   const state = crypto.randomUUID()
 
-  const oauthUrl = new URL('https://www.instagram.com/oauth/authorize')
+  const oauthUrl = new URL('https://www.facebook.com/v25.0/dialog/oauth')
   oauthUrl.searchParams.set('client_id', CLIENT_ID)
   oauthUrl.searchParams.set('redirect_uri', REDIRECT_URI)
   oauthUrl.searchParams.set('response_type', 'code')
