@@ -35,6 +35,7 @@ export async function GET(request: NextRequest) {
 
   try {
     // 1. Exchange code for short-lived access token (Instagram Business Login)
+    // Response includes user_id directly — no need for me/accounts
     const tokenResp = await fetch('https://api.instagram.com/oauth/access_token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -54,6 +55,12 @@ export async function GET(request: NextRequest) {
     }
 
     const shortToken = tokenData.access_token
+    const igUserId = tokenData.user_id
+
+    if (!igUserId) {
+      console.error('[ig callback] No user_id in token response:', JSON.stringify(tokenData))
+      return NextResponse.redirect(new URL('/dashboard/accounts?error=token_failed', request.url))
+    }
 
     // 2. Exchange for long-lived token (60 days) via Graph API
     const longResp = await fetch(
@@ -62,26 +69,18 @@ export async function GET(request: NextRequest) {
     const longData = await longResp.json()
     const longToken = longData.access_token || shortToken
 
-    // 3. Get Instagram Business Account via Graph API
-    const igResp = await fetch(
-      `https://graph.facebook.com/v25.0/me/accounts?fields=instagram_business_account{id,username,name,profile_picture_url}&access_token=${longToken}`
-    )
-    const igData = await igResp.json()
-
-    if (!igData.data?.length || !igData.data[0].instagram_business_account) {
-      console.error('[ig callback] No IG business account:', JSON.stringify(igData))
-      return NextResponse.redirect(new URL('/dashboard/accounts?error=no_ig_account', request.url))
-    }
-
-    const igAccount = igData.data[0].instagram_business_account
-
-    // 4. Get Instagram user details
+    // 3. Get Instagram user details directly (no me/accounts needed)
     const igDetailResp = await fetch(
-      `https://graph.facebook.com/v25.0/${igAccount.id}?fields=id,username,name,profile_picture_url,followers_count,media_count&access_token=${longToken}`
+      `https://graph.facebook.com/v25.0/${igUserId}?fields=id,username,name,profile_picture_url,followers_count,media_count&access_token=${longToken}`
     )
     const igDetail = await igDetailResp.json()
 
-    // 5. Get current user session
+    if (igDetail.error) {
+      console.error('[ig callback] IG detail failed:', JSON.stringify(igDetail))
+      return NextResponse.redirect(new URL('/dashboard/accounts?error=no_ig_account', request.url))
+    }
+
+    // 4. Get current user session
     const supabase = await createClient()
     const { data: { session } } = await supabase.auth.getSession()
 
@@ -89,11 +88,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/auth/login', request.url))
     }
 
-    // 6. Save to database
+    // 5. Save to database
     const { error: dbError } = await supabase.from('accounts').upsert({
       user_id: session.user.id,
-      ig_id: String(igAccount.id),
-      ig_username: igDetail.username || igAccount.username || '',
+      ig_id: String(igUserId),
+      ig_username: igDetail.username || '',
       access_token: longToken,
     }, { onConflict: 'ig_id' })
 
