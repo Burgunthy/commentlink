@@ -157,70 +157,43 @@ export default function Home() {
       <section id="pricing" className="py-20 bg-surface">
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-foreground">Pricing</h2>
-            <p className="mt-3 text-muted">Start now and get your first month free</p>
+            <h2 className="text-3xl font-bold text-foreground">Simple Pricing</h2>
+            <p className="mt-3 text-muted">Start free for 30 days. Cancel anytime.</p>
           </div>
-          <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
-            {[
-              {
-                name: 'Starter',
-                price: 'Free',
-                period: '',
-                features: ['1 Instagram account', '10 posts', 'Basic comment replies'],
-              },
-              {
-                name: 'Pro',
-                price: '$29',
-                period: '/mo',
-                features: ['5 Instagram accounts', 'Unlimited posts', 'Auto DM sending', 'Affiliate link management', 'Analytics dashboard'],
-                highlight: true,
-              },
-              {
-                name: 'Business',
-                price: '$79',
-                period: '/mo',
-                features: ['Unlimited Instagram accounts', 'All Pro features', 'API access', 'Priority support'],
-              },
-            ].map((plan, i) => (
-              <div
-                key={i}
-                className={`relative p-8 rounded-2xl border ${
-                  plan.highlight
-                    ? 'border-primary bg-background shadow-lg shadow-primary/10'
-                    : 'border-border bg-background'
-                }`}
-              >
-                {plan.highlight && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-primary text-white text-xs font-medium">
-                    Popular
-                  </div>
-                )}
-                <h3 className="text-lg font-semibold text-foreground">{plan.name}</h3>
-                <div className="mt-4">
-                  <span className="text-3xl font-bold text-foreground">{plan.price}</span>
-                  <span className="text-muted text-sm">{plan.period}</span>
-                </div>
-                <ul className="mt-6 space-y-3">
-                  {plan.features.map((f, j) => (
-                    <li key={j} className="flex items-center gap-2 text-sm text-muted">
-                      <svg className="w-4 h-4 text-primary flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  className={`mt-8 w-full py-2.5 rounded-full text-sm font-medium transition-colors ${
-                    plan.highlight
-                      ? 'bg-primary text-white hover:bg-primary-dark'
-                      : 'border border-border text-foreground hover:bg-surface-hover'
-                  }`}
-                >
-                  {plan.price === 'Free' ? 'Start for Free' : 'Subscribe'}
-                </button>
+          <div className="max-w-md mx-auto">
+            <div className="relative p-8 rounded-2xl border border-primary bg-background shadow-lg shadow-primary/10">
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-primary text-white text-xs font-medium">
+                30 Days Free
               </div>
-            ))}
+              <h3 className="text-lg font-semibold text-foreground">DMify</h3>
+              <div className="mt-4">
+                <span className="text-4xl font-bold text-foreground">$4.9</span>
+                <span className="text-muted text-sm">/month</span>
+              </div>
+              <p className="mt-2 text-xs text-muted">Billed monthly after free trial</p>
+              <ul className="mt-6 space-y-3">
+                {[
+                  'Multiple Instagram accounts',
+                  'Unlimited posts',
+                  'Auto DM with affiliate links',
+                  'Comment auto-reply',
+                  'Follow verification',
+                  'Analytics dashboard',
+                ].map((f, j) => (
+                  <li key={j} className="flex items-center gap-2 text-sm text-muted">
+                    <svg className="w-4 h-4 text-primary flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                    {f}
+                  </li>
+                ))}
+              </ul>
+              <button
+                className="mt-8 w-full py-2.5 rounded-full text-sm font-medium bg-primary text-white hover:bg-primary-dark transition-colors"
+              >
+                Start Free Trial
+              </button>
+            </div>
           </div>
         </div>
       </section>
