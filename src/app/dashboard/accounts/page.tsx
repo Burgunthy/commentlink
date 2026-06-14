@@ -3,14 +3,12 @@
 import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import {
-  Plus,
   Trash2,
   RefreshCw,
   AtSign,
-  Users,
   CheckCircle2,
   AlertCircle,
-  Instagram,
+  Camera,
   ExternalLink,
 } from "lucide-react"
 
@@ -37,14 +35,11 @@ interface Account {
 export default function AccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
-  const [searchParams, setSearchParams] = useState<URLSearchParams | null>(null)
+  const [searchParams] = useState(() => new URLSearchParams(window.location.search))
 
   useEffect(() => {
-    // Check URL params for OAuth result
-    const params = new URLSearchParams(window.location.search)
-    setSearchParams(params)
-    // Clear URL params
-    if (params.toString()) {
+    // Clear URL params on mount
+    if (searchParams.toString()) {
       window.history.replaceState({}, "", "/dashboard/accounts")
     }
     fetchAccounts()
@@ -146,7 +141,7 @@ export default function AccountsPage() {
           onClick={handleConnect}
           className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:from-purple-700 hover:to-pink-700 hover:shadow-md"
         >
-          <Instagram className="h-4 w-4" />
+          <Camera className="h-4 w-4" />
           Connect Instagram
         </button>
       </div>
@@ -155,7 +150,7 @@ export default function AccountsPage() {
       {accounts.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-white py-16 dark:border-zinc-700 dark:bg-zinc-900">
           <div className="mb-4 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 p-4">
-            <Instagram className="h-8 w-8 text-white" />
+            <Camera className="h-8 w-8 text-white" />
           </div>
           <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
             No connected accounts yet
@@ -167,7 +162,7 @@ export default function AccountsPage() {
             onClick={handleConnect}
             className="mt-4 flex items-center gap-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-2 text-sm font-medium text-white transition-all hover:from-purple-700 hover:to-pink-700"
           >
-            <Instagram className="h-4 w-4" />
+            <Camera className="h-4 w-4" />
             Connect with Instagram
           </button>
         </div>
