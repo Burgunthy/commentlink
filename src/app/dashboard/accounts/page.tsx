@@ -10,6 +10,9 @@ import {
   AlertCircle,
   Camera,
   ExternalLink,
+  Key,
+  Loader2,
+  X,
 } from "lucide-react"
 
 interface Account {
@@ -35,16 +38,12 @@ interface Account {
 export default function AccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
-  const [searchParams] = useState(() => {
-  if (typeof window === 'undefined') return new URLSearchParams()
-  return new URLSearchParams(window.location.search)
-})
+  const [showModal, setShowModal] = useState(false)
+  const [token, setToken] = useState("")
+  const [connecting, setConnecting] = useState(false)
+  const [connectError, setConnectError] = useState("")
 
   useEffect(() => {
-    // Clear URL params on mount
-    if (searchParams.toString()) {
-      window.history.replaceState({}, "", "/dashboard/accounts")
-    }
     fetchAccounts()
   }, [])
 
@@ -63,8 +62,29 @@ export default function AccountsPage() {
     }
   }
 
-  const handleConnect = () => {
-    window.location.href = "/api/auth/instagram"
+  const handleConnect = async () => {
+    if (!token.trim()) return
+    setConnecting(true)
+    setConnectError("")
+    try {
+      const resp = await fetch("/api/accounts/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ access_token: token.trim() }),
+      })
+      const data = await resp.json()
+      if (!resp.ok) {
+        setConnectError(data.error || "Connection failed")
+        return
+      }
+      setShowModal(false)
+      setToken("")
+      await fetchAccounts()
+    } catch {
+      setConnectError("Network error. Please try again.")
+    } finally {
+      setConnecting(false)
+    }
   }
 
   const handleDelete = async (id: string) => {
@@ -78,28 +98,9 @@ export default function AccountsPage() {
     }
   }
 
-  const handleRefresh = async (account: Account) => {
-    // TODO: refresh long-lived token via Meta API
-    const supabase = createClient()
-    try {
-      await supabase
-        .from("accounts")
-        .update({ updated_at: new Date().toISOString() })
-        .eq("id", account.id)
-      await fetchAccounts()
-    } catch {
-      alert("Failed to refresh.")
-    }
-  }
-
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
     return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, "0")}.${String(date.getDate()).padStart(2, "0")}`
-  }
-
-  const isTokenExpired = (expiresAt: string | null) => {
-    if (!expiresAt) return false
-    return new Date(expiresAt) < new Date()
   }
 
   if (loading) {
@@ -112,24 +113,6 @@ export default function AccountsPage() {
 
   return (
     <div className="space-y-6">
-      {/* OAuth result notifications */}
-      {searchParams?.get("success") === "connected" && (
-        <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-900/20">
-          <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
-          <p className="text-sm text-emerald-800 dark:text-emerald-300">
-            Instagram account connected successfully!
-          </p>
-        </div>
-      )}
-      {searchParams?.get("error") && (
-        <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
-          <AlertCircle className="h-5 w-5 shrink-0 text-red-600" />
-          <p className="text-sm text-red-800 dark:text-red-300">
-            Connection failed. Error: {searchParams.get("error")}
-          </p>
-        </div>
-      )}
-
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -141,7 +124,7 @@ export default function AccountsPage() {
           </p>
         </div>
         <button
-          onClick={handleConnect}
+          onClick={() => setShowModal(true)}
           className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:from-purple-700 hover:to-pink-700 hover:shadow-md"
         >
           <Camera className="h-4 w-4" />
@@ -162,7 +145,7 @@ export default function AccountsPage() {
             Connect your Instagram account to start auto-DMing links to commenters.
           </p>
           <button
-            onClick={handleConnect}
+            onClick={() => setShowModal(true)}
             className="mt-4 flex items-center gap-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-2 text-sm font-medium text-white transition-all hover:from-purple-700 hover:to-pink-700"
           >
             <Camera className="h-4 w-4" />
@@ -176,12 +159,9 @@ export default function AccountsPage() {
               key={account.id}
               className="flex items-center gap-4 rounded-xl border border-zinc-200 bg-white p-4 transition-shadow hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900"
             >
-              {/* Avatar */}
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-pink-500">
                 <AtSign className="h-6 w-6 text-white" />
               </div>
-
-              {/* Info */}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
@@ -192,19 +172,11 @@ export default function AccountsPage() {
                   ) : (
                     <AlertCircle className="h-4 w-4 text-amber-500" />
                   )}
-                  {isTokenExpired(account.token_expires_at) && (
-                    <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                      Token expired
-                    </span>
-                  )}
                 </div>
                 <div className="mt-0.5 flex items-center gap-3 text-xs text-zinc-500">
                   <span>Connected: {formatDate(account.created_at)}</span>
-                  <span>Last updated: {formatDate(account.updated_at)}</span>
                 </div>
               </div>
-
-              {/* Feature tags */}
               <div className="hidden flex-wrap items-center gap-1.5 sm:flex">
                 {account.public_reply_enabled && (
                   <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs text-blue-700 dark:bg-blue-900/20 dark:text-blue-400">
@@ -216,41 +188,101 @@ export default function AccountsPage() {
                     Follow Check
                   </span>
                 )}
-                {account.auto_sync_enabled && (
-                  <span className="rounded-full bg-purple-50 px-2.5 py-0.5 text-xs text-purple-700 dark:bg-purple-900/20 dark:text-purple-400">
-                    Auto Sync
-                  </span>
-                )}
               </div>
-
-              {/* Actions */}
               <div className="flex items-center gap-1">
                 <a
                   href={`https://instagram.com/${account.ig_username}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-primary dark:hover:bg-zinc-800"
-                  title="Open Instagram"
                 >
                   <ExternalLink className="h-4 w-4" />
                 </a>
                 <button
-                  onClick={() => handleRefresh(account)}
-                  className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-primary dark:hover:bg-zinc-800"
-                  title="Refresh token"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                </button>
-                <button
                   onClick={() => handleDelete(account.id)}
                   className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20"
-                  title="Disconnect"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Token Input Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl dark:bg-zinc-900">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-purple-100 p-2 dark:bg-purple-900/30">
+                  <Key className="h-5 w-5 text-purple-600" />
+                </div>
+                <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                  Connect Instagram
+                </h2>
+              </div>
+              <button
+                onClick={() => { setShowModal(false); setConnectError("") }}
+                className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mb-4 rounded-lg bg-blue-50 p-3 dark:bg-blue-900/20">
+              <p className="text-xs text-blue-800 dark:text-blue-300 leading-relaxed">
+                <strong>How to get your token:</strong><br />
+                1. Go to your Meta App → Instagram API<br />
+                2. Click &quot;Add Instagram account&quot; in step 2<br />
+                3. Generate a long-lived token<br />
+                4. Copy and paste it below
+              </p>
+            </div>
+
+            <textarea
+              value={token}
+              onChange={(e) => { setToken(e.target.value); setConnectError("") }}
+              className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 font-mono focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+              rows={4}
+              placeholder="Paste your Instagram access token here..."
+              disabled={connecting}
+            />
+
+            {connectError && (
+              <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+                {connectError}
+              </p>
+            )}
+
+            <div className="mt-4 flex justify-end gap-3">
+              <button
+                onClick={() => { setShowModal(false); setConnectError("") }}
+                className="rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                disabled={connecting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConnect}
+                disabled={connecting || !token.trim()}
+                className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-2 text-sm font-medium text-white transition-all hover:from-purple-700 hover:to-pink-700 disabled:opacity-50"
+              >
+                {connecting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Connecting...
+                  </>
+                ) : (
+                  <>
+                    <Camera className="h-4 w-4" />
+                    Connect
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

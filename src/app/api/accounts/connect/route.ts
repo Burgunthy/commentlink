@@ -1,0 +1,99 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+
+export async function POST(request: NextRequest) {
+  try {
+    const { access_token } = await request.json()
+
+    if (!access_token || typeof access_token !== 'string') {
+      return NextResponse.json({ error: 'access_token is required' }, { status: 400 })
+    }
+
+    const token = access_token.trim()
+
+    // Read Meta credentials from env
+    const appId = process.env.META_APP_ID
+    const appSecret = process.env.META_APP_SECRET
+    if (!appId || !appSecret) {
+      return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 })
+    }
+
+    // 1. Exchange for long-lived token if short-lived
+    let longToken = token
+    try {
+      const exUrl = `https://graph.facebook.com/v25.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${token}`
+      const exResp = await fetch(exUrl)
+      const exData = await exResp.json()
+      if (exData.access_token) longToken = exData.access_token
+    } catch { /* keep original token */ }
+
+    // 2. Get Facebook Pages with Instagram Business accounts
+    const pagesUrl = `https://graph.facebook.com/v25.0/me/accounts?fields=instagram_business_account{id,username,name,profile_picture_url}&access_token=${longToken}`
+    const pagesResp = await fetch(pagesUrl)
+    const pagesData = await pagesResp.json()
+
+    if (!pagesResp.ok) {
+      const msg = pagesData.error?.message || 'unknown error'
+      return NextResponse.json({ error: `Token validation failed: ${msg}` }, { status: 400 })
+    }
+
+    if (!pagesData.data?.length) {
+      return NextResponse.json(
+        { error: 'No Facebook Pages linked. Please link a Facebook Page with an Instagram Business account.' },
+        { status: 400 }
+      )
+    }
+
+    // 3. Find first page with IG Business account
+    let igAccount = null
+    for (const page of pagesData.data) {
+      if (page.instagram_business_account) {
+        igAccount = page.instagram_business_account
+        break
+      }
+    }
+
+    if (!igAccount) {
+      return NextResponse.json(
+        { error: 'No Instagram Business account found on your Facebook Pages.' },
+        { status: 400 }
+      )
+    }
+
+    // 4. Get Instagram user details
+    const detailUrl = `https://graph.facebook.com/v25.0/${igAccount.id}?fields=id,username,name,profile_picture_url,followers_count,media_count&access_token=${longToken}`
+    const igDetailResp = await fetch(detailUrl)
+    const igDetail = await igDetailResp.json()
+
+    // 5. Get current user session
+    const supabase = await createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
+    // 6. Save to database
+    const { error: dbError } = await supabase.from('accounts').upsert({
+      user_id: session.user.id,
+      ig_id: String(igAccount.id),
+      ig_username: igDetail.username || igAccount.username || '',
+      access_token: longToken,
+    }, { onConflict: 'ig_id' })
+
+    if (dbError) {
+      return NextResponse.json({ error: dbError.message }, { status: 400 })
+    }
+
+    return NextResponse.json({
+      data: {
+        ig_id: igAccount.id,
+        ig_username: igDetail.username || igAccount.username,
+        followers_count: igDetail.followers_count,
+      }
+    }, { status: 201 })
+  } catch (err) {
+    console.error('[connect] Unexpected:', err)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
