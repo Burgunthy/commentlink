@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     // Validate required fields
     if (!name || !link_url) {
       return NextResponse.json(
-        { error: 'name, link_url 필드가 필요합니다.' },
+        { error: 'name and link_url fields are required.' },
         { status: 400 }
       )
     }

@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "DMify — 인스타그램 댓글 자동 답장 & 제휴링크",
+  title: "DMify — Instagram Comment Auto-Reply & Affiliate Links",
   description:
-    "인스타그램 댓글에 자동으로 답장하고, 팔로우 확인 후 제휴링크를 DM으로 발송하는 SaaS 플랫폼",
+    "A SaaS platform that automatically replies to Instagram comments and sends affiliate links via DM after verifying follows",
 };
 
 export default function RootLayout({
@@ -25,7 +25,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="ko"
+      lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>

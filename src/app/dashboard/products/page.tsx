@@ -77,7 +77,7 @@ export default function ProductsPage() {
 
   const handleSave = async () => {
     if (!form.name.trim() || !form.url.trim()) {
-      alert("상품 이름과 URL을 입력해주세요.")
+      alert("Please enter a product name and URL.")
       return
     }
 
@@ -95,20 +95,20 @@ export default function ProductsPage() {
       setShowModal(false)
       await fetchProducts()
     } catch {
-      alert("상품 저장에 실패했습니다.")
+      alert("Failed to save the product.")
     } finally {
       setSaving(false)
     }
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm("정말 삭제하시겠습니까?")) return
+    if (!confirm("Are you sure you want to delete this?")) return
     const supabase = createClient()
     try {
       await supabase.from("products").delete().eq("id", id)
       await fetchProducts()
     } catch {
-      alert("삭제에 실패했습니다.")
+      alert("Failed to delete.")
     }
   }
 
@@ -121,7 +121,7 @@ export default function ProductsPage() {
         .eq("id", product.id)
       await fetchProducts()
     } catch {
-      alert("상태 변경에 실패했습니다.")
+      alert("Failed to change status.")
     }
   }
 
@@ -149,7 +149,7 @@ export default function ProductsPage() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="상품 검색..."
+            placeholder="Search products..."
             className="w-full rounded-lg border border-zinc-200 bg-white py-2 pl-10 pr-4 text-sm text-zinc-900 placeholder-zinc-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
           />
         </div>
@@ -158,7 +158,7 @@ export default function ProductsPage() {
           className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-hover"
         >
           <Plus className="h-4 w-4" />
-          상품 추가
+          Add Product
         </button>
       </div>
 
@@ -167,14 +167,14 @@ export default function ProductsPage() {
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-white py-16 dark:border-zinc-700 dark:bg-zinc-900">
           <Package className="mb-3 h-10 w-10 text-zinc-300 dark:text-zinc-600" />
           <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-            {search ? "검색 결과가 없습니다." : "아직 등록된 상품이 없습니다."}
+            {search ? "No results found." : "No products registered yet."}
           </p>
           {!search && (
             <button
               onClick={openAdd}
               className="mt-2 text-sm text-primary hover:underline"
             >
-              첫 상품을 추가해보세요
+              Add your first product
             </button>
           )}
         </div>
@@ -198,11 +198,11 @@ export default function ProductsPage() {
                           : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
                       }`}
                     >
-                      {product.is_active ? "활성" : "비활성"}
+                      {product.is_active ? "Active" : "Inactive"}
                     </span>
                   </div>
                   <p className="mt-1 truncate text-xs text-zinc-500 dark:text-zinc-400">
-                    {product.description || "설명 없음"}
+                    {product.description || "No description"}
                   </p>
                 </div>
               </div>
@@ -217,7 +217,7 @@ export default function ProductsPage() {
                   onClick={() => toggleActive(product)}
                   className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
                 >
-                  {product.is_active ? "비활성화" : "활성화"}
+                  {product.is_active ? "Deactivate" : "Activate"}
                 </button>
                 <button
                   onClick={() => openEdit(product)}
@@ -242,13 +242,13 @@ export default function ProductsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-zinc-900">
             <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-              {editingProduct ? "상품 수정" : "상품 추가"}
+              {editingProduct ? "Edit Product" : "Add Product"}
             </h2>
 
             <div className="mt-4 space-y-4">
               <div>
                 <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  상품 이름 <span className="text-red-500">*</span>
+                  Product Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -257,13 +257,13 @@ export default function ProductsPage() {
                     setForm((prev) => ({ ...prev, name: e.target.value }))
                   }
                   className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-                  placeholder="예: 프리미엄 스킨케어 세트"
+                  placeholder="e.g. Premium Skincare Set"
                 />
               </div>
 
               <div>
                 <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  상품 URL <span className="text-red-500">*</span>
+                  Product URL <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="url"
@@ -278,7 +278,7 @@ export default function ProductsPage() {
 
               <div>
                 <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  설명
+                  Description
                 </label>
                 <textarea
                   value={form.description}
@@ -290,13 +290,13 @@ export default function ProductsPage() {
                   }
                   rows={3}
                   className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-                  placeholder="상품 설명을 입력하세요..."
+                  placeholder="Enter a product description..."
                 />
               </div>
 
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  활성화
+                  Active
                 </label>
                 <button
                   onClick={() =>
@@ -323,14 +323,14 @@ export default function ProductsPage() {
                 onClick={() => setShowModal(false)}
                 className="rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
               >
-                취소
+                Cancel
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving}
                 className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-hover disabled:opacity-60"
               >
-                {saving ? "저장 중..." : "저장"}
+                {saving ? "Saving..." : "Save"}
               </button>
             </div>
           </div>

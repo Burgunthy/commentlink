@@ -16,7 +16,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       .single()
 
     if (error || !data) {
-      return NextResponse.json({ error: '계정을 찾을 수 없습니다.' }, { status: 404 })
+      return NextResponse.json({ error: 'Account not found.' }, { status: 404 })
     }
 
     return NextResponse.json({ data })
@@ -52,7 +52,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     if (Object.keys(updates).length === 0) {
-      return NextResponse.json({ error: '수정할 필드가 없습니다.' }, { status: 400 })
+      return NextResponse.json({ error: 'No fields to update.' }, { status: 400 })
     }
 
     const { data, error } = await supabase

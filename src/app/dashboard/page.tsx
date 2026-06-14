@@ -99,25 +99,25 @@ export default function DashboardPage() {
 
   const statCards = [
     {
-      label: "총 댓글 수",
+      label: "Total Comments",
       value: stats.totalComments,
       change: stats.commentsChange,
       icon: MessageSquare,
     },
     {
-      label: "총 클릭 수",
+      label: "Total Clicks",
       value: stats.totalClicks,
       change: stats.clicksChange,
       icon: BarChart3,
     },
     {
-      label: "등록된 상품",
+      label: "Registered Products",
       value: stats.totalProducts,
       change: null,
       icon: Package,
     },
     {
-      label: "연동된 계정",
+      label: "Connected Accounts",
       value: stats.totalAccounts,
       change: null,
       icon: Users,
@@ -174,7 +174,7 @@ export default function DashboardPage() {
                       <span className="text-red-500">{card.change}%</span>
                     </>
                   )}
-                  <span className="text-zinc-400">지난 7일</span>
+                  <span className="text-zinc-400">Last 7 days</span>
                 </div>
               )}
             </div>
@@ -188,17 +188,17 @@ export default function DashboardPage() {
           <div className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-primary" />
             <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
-              최근 댓글 활동
+              Recent Comment Activity
             </h2>
           </div>
-          <span className="text-xs text-zinc-500">최근 5개</span>
+          <span className="text-xs text-zinc-500">Last 5</span>
         </div>
 
         {recentComments.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-zinc-400">
             <MessageSquare className="mb-3 h-10 w-10" />
-            <p className="text-sm">아직 댓글 데이터가 없습니다.</p>
-            <p className="mt-1 text-xs">인스타그램 계정을 연동하고 상품을 등록해보세요.</p>
+            <p className="text-sm">No comment data yet.</p>
+            <p className="mt-1 text-xs">Connect your Instagram account and add products to get started.</p>
           </div>
         ) : (
           <div className="divide-y divide-zinc-100 dark:divide-zinc-800">

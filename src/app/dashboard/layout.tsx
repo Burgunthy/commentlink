@@ -16,10 +16,10 @@ import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 
 const navItems = [
-  { href: "/dashboard", label: "대시보드", icon: LayoutDashboard },
-  { href: "/dashboard/products", label: "상품 관리", icon: Package },
-  { href: "/dashboard/accounts", label: "계정 관리", icon: Users },
-  { href: "/dashboard/settings", label: "설정", icon: Settings },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard/products", label: "Products", icon: Package },
+  { href: "/dashboard/accounts", label: "Accounts", icon: Users },
+  { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ]
 
 export default function DashboardLayout({
@@ -106,7 +106,7 @@ export default function DashboardLayout({
             className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-text transition-colors duration-150 hover:bg-white/5 hover:text-white"
           >
             <LogOut className="h-5 w-5 shrink-0" />
-            로그아웃
+            Sign Out
           </button>
         </div>
       </aside>
@@ -122,7 +122,7 @@ export default function DashboardLayout({
             <Menu className="h-5 w-5" />
           </button>
           <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-            {navItems.find((item) => isActive(item.href))?.label ?? "대시보드"}
+            {navItems.find((item) => isActive(item.href))?.label ?? "Dashboard"}
           </h1>
         </header>
 

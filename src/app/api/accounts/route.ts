@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     // Validate required fields
     if (!ig_username || !ig_user_id || !access_token) {
       return NextResponse.json(
-        { error: 'ig_username, ig_user_id, access_token 필드가 필요합니다.' },
+        { error: 'ig_username, ig_user_id, and access_token fields are required.' },
         { status: 400 }
       )
     }

@@ -13,15 +13,15 @@ export default function Home() {
             <span className="text-lg font-bold text-foreground">DMify</span>
           </div>
           <nav className="hidden md:flex items-center gap-6 text-sm text-muted">
-            <a href="#features" className="hover:text-primary transition-colors">기능</a>
-            <a href="#how-it-works" className="hover:text-primary transition-colors">작동 원리</a>
-            <a href="#pricing" className="hover:text-primary transition-colors">요금제</a>
+            <a href="#features" className="hover:text-primary transition-colors">Features</a>
+            <a href="#how-it-works" className="hover:text-primary transition-colors">How It Works</a>
+            <a href="#pricing" className="hover:text-primary transition-colors">Pricing</a>
           </nav>
           <a
             href="/dashboard"
             className="inline-flex items-center px-4 py-2 rounded-full bg-primary text-white text-sm font-medium hover:bg-primary-dark transition-colors"
           >
-            시작하기
+            Get Started
           </a>
         </div>
       </header>
@@ -35,42 +35,42 @@ export default function Home() {
             Instagram Graph API v25
           </div>
           <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight text-foreground leading-tight">
-            인스타그램 댓글이
+            Turn Instagram Comments
             <br />
-            <span className="text-primary">제휴 수익</span>으로 변합니다
+            Into <span className="text-primary">Affiliate Revenue</span>
           </h1>
           <p className="mt-6 text-lg md:text-xl text-muted max-w-2xl mx-auto leading-relaxed">
-            댓글 작성 시 자동 답장 → 팔로우 확인 → 제휴링크 DM 발송.
+            Auto-reply on comments → Verify follows → Send affiliate link via DM.
             <br className="hidden md:block" />
-            수동 작업 없이 24시간 자동화된 인플루언서 마케팅.
+            24/7 automated influencer marketing with zero manual work.
           </p>
           <div className="mt-10 flex flex-col sm:flex-row gap-4 justify-center">
             <a
               href="/dashboard"
               className="inline-flex items-center justify-center px-8 py-3.5 rounded-full bg-primary text-white font-semibold hover:bg-primary-dark transition-colors shadow-lg shadow-primary/25"
             >
-              무료로 시작하기 →
+              Get Started Free →
             </a>
             <a
               href="#how-it-works"
               className="inline-flex items-center justify-center px-8 py-3.5 rounded-full border border-border text-foreground font-medium hover:bg-surface-hover transition-colors"
             >
-              작동 원리 보기
+              See How It Works
             </a>
           </div>
           {/* Stats */}
           <div className="mt-16 grid grid-cols-3 gap-8 max-w-md mx-auto">
             <div>
               <div className="text-2xl font-bold text-primary">24/7</div>
-              <div className="text-sm text-muted mt-1">자동 답장</div>
+              <div className="text-sm text-muted mt-1">Auto Replies</div>
             </div>
             <div>
-              <div className="text-2xl font-bold text-primary">3초</div>
-              <div className="text-sm text-muted mt-1">평균 응답</div>
+              <div className="text-2xl font-bold text-primary">3 sec</div>
+              <div className="text-sm text-muted mt-1">Avg Response</div>
             </div>
             <div>
               <div className="text-2xl font-bold text-primary">∞</div>
-              <div className="text-sm text-muted mt-1">계정 연결</div>
+              <div className="text-sm text-muted mt-1">Account Links</div>
             </div>
           </div>
         </div>
@@ -80,8 +80,8 @@ export default function Home() {
       <section id="features" className="py-20 bg-surface">
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-foreground">핵심 기능</h2>
-            <p className="mt-3 text-muted">인스타그램 비즈니스를 자동화하는 모든 도구</p>
+            <h2 className="text-3xl font-bold text-foreground">Core Features</h2>
+            <p className="mt-3 text-muted">All the tools you need to automate your Instagram business</p>
           </div>
           <div className="grid md:grid-cols-3 gap-8">
             {[
@@ -91,8 +91,8 @@ export default function Home() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
                   </svg>
                 ),
-                title: '자동 댓글 답장',
-                desc: '새 댓글이 달리면 즉시 설정한 메시지로 자동 답장. 랜딩 페이지 URL 포함 가능.',
+                title: 'Auto Comment Reply',
+                desc: 'Instantly reply with a preset message when a new comment is posted. Landing page URLs supported.',
               },
               {
                 icon: (
@@ -100,8 +100,8 @@ export default function Home() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                   </svg>
                 ),
-                title: '팔로우 확인 DM',
-                desc: '댓글 작성자에게 자동 DM 발송. 팔로우 확인 버튼으로 팔로워 전환.',
+                title: 'Follow Verification DM',
+                desc: 'Automatically send DMs to commenters. Convert them into followers with a follow-verify button.',
               },
               {
                 icon: (
@@ -109,8 +109,8 @@ export default function Home() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                   </svg>
                 ),
-                title: '제휴링크 관리',
-                desc: '상품별 제휴링크를 등록하고, DM에 자동 삽입. 전환율 추적.',
+                title: 'Affiliate Link Management',
+                desc: 'Register affiliate links per product and auto-insert them into DMs. Track conversion rates.',
               },
             ].map((feature, i) => (
               <div
@@ -132,14 +132,14 @@ export default function Home() {
       <section id="how-it-works" className="py-20">
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-foreground">작동 원리</h2>
-            <p className="mt-3 text-muted">3단계로 자동 수익 파이프라인 구축</p>
+            <h2 className="text-3xl font-bold text-foreground">How It Works</h2>
+            <p className="mt-3 text-muted">Build an automated revenue pipeline in 3 steps</p>
           </div>
           <div className="grid md:grid-cols-3 gap-8">
             {[
-              { step: '01', title: '인스타 계정 연결', desc: 'Meta Business 계정과 Instagram 프로필을 연결합니다.' },
-              { step: '02', title: '자동 답장 설정', desc: '댓글 답장 템플릿과 DM 메시지를 작성합니다.' },
-              { step: '03', title: '제휴링크 등록', desc: '상품 제휴링크를 등록하면 DM에 자동 포함됩니다.' },
+              { step: '01', title: 'Connect Instagram', desc: 'Link your Meta Business account and Instagram profile.' },
+              { step: '02', title: 'Set Up Auto-Reply', desc: 'Write comment reply templates and DM messages.' },
+              { step: '03', title: 'Add Affiliate Links', desc: 'Register product affiliate links and they\'ll be auto-included in DMs.' },
             ].map((item, i) => (
               <div key={i} className="relative text-center">
                 <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary text-white text-xl font-bold mb-6">
@@ -157,29 +157,29 @@ export default function Home() {
       <section id="pricing" className="py-20 bg-surface">
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-foreground">요금제</h2>
-            <p className="mt-3 text-muted">지금 시작하면 첫 달 무료</p>
+            <h2 className="text-3xl font-bold text-foreground">Pricing</h2>
+            <p className="mt-3 text-muted">Start now and get your first month free</p>
           </div>
           <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
             {[
               {
-                name: '스타터',
-                price: '무료',
+                name: 'Starter',
+                price: 'Free',
                 period: '',
-                features: ['인스타 계정 1개', '게시물 10개', '기본 댓글 답장'],
+                features: ['1 Instagram account', '10 posts', 'Basic comment replies'],
               },
               {
-                name: '프로',
-                price: '₩29,000',
-                period: '/월',
-                features: ['인스타 계정 5개', '게시물 무제한', '자동 DM 발송', '제휴링크 관리', '분석 대시보드'],
+                name: 'Pro',
+                price: '$29',
+                period: '/mo',
+                features: ['5 Instagram accounts', 'Unlimited posts', 'Auto DM sending', 'Affiliate link management', 'Analytics dashboard'],
                 highlight: true,
               },
               {
-                name: '비즈니스',
-                price: '₩79,000',
-                period: '/월',
-                features: ['인스타 계정 무제한', '모든 프로 기능', 'API 액세스', '우선 지원'],
+                name: 'Business',
+                price: '$79',
+                period: '/mo',
+                features: ['Unlimited Instagram accounts', 'All Pro features', 'API access', 'Priority support'],
               },
             ].map((plan, i) => (
               <div
@@ -192,7 +192,7 @@ export default function Home() {
               >
                 {plan.highlight && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-primary text-white text-xs font-medium">
-                    인기
+                    Popular
                   </div>
                 )}
                 <h3 className="text-lg font-semibold text-foreground">{plan.name}</h3>
@@ -217,7 +217,7 @@ export default function Home() {
                       : 'border border-border text-foreground hover:bg-surface-hover'
                   }`}
                 >
-                  {plan.price === '무료' ? '무료 시작' : '구독하기'}
+                  {plan.price === 'Free' ? 'Start for Free' : 'Subscribe'}
                 </button>
               </div>
             ))}
@@ -229,16 +229,16 @@ export default function Home() {
       <section className="py-20">
         <div className="max-w-3xl mx-auto px-6 text-center">
           <h2 className="text-3xl font-bold text-foreground">
-            지금 바로 자동화를 시작하세요
+            Start Automating Today
           </h2>
           <p className="mt-4 text-muted text-lg">
-            설치까지 5분. 카드 없이 무료로 시작할 수 있습니다.
+            Up and running in 5 minutes. No credit card required to get started.
           </p>
           <a
             href="/dashboard"
             className="inline-flex items-center justify-center mt-8 px-10 py-4 rounded-full bg-primary text-white font-semibold text-lg hover:bg-primary-dark transition-colors shadow-lg shadow-primary/25"
           >
-            무료로 시작하기 →
+            Get Started Free →
           </a>
         </div>
       </section>
@@ -255,8 +255,8 @@ export default function Home() {
             <span>© 2025 DMify. All rights reserved.</span>
           </div>
           <div className="flex items-center gap-4">
-            <a href="#" className="hover:text-primary transition-colors">이용약관</a>
-            <a href="#" className="hover:text-primary transition-colors">개인정보처리방침</a>
+            <a href="#" className="hover:text-primary transition-colors">Terms of Service</a>
+            <a href="#" className="hover:text-primary transition-colors">Privacy Policy</a>
           </div>
         </div>
       </footer>
