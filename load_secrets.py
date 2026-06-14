@@ -25,6 +25,7 @@ MAPPING = {
     "supabase.service_role": "SUPABASE_SERVICE_ROLE_KEY",
     "meta.app_id": "META_APP_ID",
     "meta.app_secret": "META_APP_SECRET",
+    "instagram.client_id": "INSTAGRAM_CLIENT_ID",
 }
 
 EMPTY = ""

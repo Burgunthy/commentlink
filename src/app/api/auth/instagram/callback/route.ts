@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get('state')
   const errorParam = searchParams.get('error')
 
-  const APP_ID = getEnv('META_APP_ID')
+  const CLIENT_ID = getEnv('INSTAGRAM_CLIENT_ID')
   const APP_SECRET = getEnv('META_APP_SECRET')
   const APP_URL = getEnv('NEXT_PUBLIC_APP_URL')
   const REDIRECT_URI = `${APP_URL}/api/auth/instagram/callback`
@@ -34,27 +34,35 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // 1. Exchange code for access token
-    const tokenResp = await fetch(
-      `https://graph.facebook.com/v25.0/oauth/access_token?client_id=${APP_ID}&client_secret=${APP_SECRET}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&code=${code}`
-    )
+    // 1. Exchange code for short-lived access token (Instagram Business Login)
+    const tokenResp = await fetch('https://api.instagram.com/oauth/access_token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: CLIENT_ID,
+        client_secret: APP_SECRET,
+        grant_type: 'authorization_code',
+        redirect_uri: REDIRECT_URI,
+        code,
+      }),
+    })
     const tokenData = await tokenResp.json()
 
     if (!tokenResp.ok || !tokenData.access_token) {
-      console.error('[ig callback] Token exchange failed:', tokenData)
+      console.error('[ig callback] Token exchange failed:', JSON.stringify(tokenData))
       return NextResponse.redirect(new URL('/dashboard/accounts?error=token_failed', request.url))
     }
 
     const shortToken = tokenData.access_token
 
-    // 2. Exchange for long-lived token (60 days)
+    // 2. Exchange for long-lived token (60 days) via Graph API
     const longResp = await fetch(
-      `https://graph.facebook.com/v25.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${APP_ID}&client_secret=${APP_SECRET}&fb_exchange_token=${shortToken}`
+      `https://graph.facebook.com/v25.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${CLIENT_ID}&client_secret=${APP_SECRET}&fb_exchange_token=${shortToken}`
     )
     const longData = await longResp.json()
     const longToken = longData.access_token || shortToken
 
-    // 3. Get Instagram Business Account
+    // 3. Get Instagram Business Account via Graph API
     const igResp = await fetch(
       `https://graph.facebook.com/v25.0/me/accounts?fields=instagram_business_account{id,username,name,profile_picture_url}&access_token=${longToken}`
     )
