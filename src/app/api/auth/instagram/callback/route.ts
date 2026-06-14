@@ -84,16 +84,10 @@ export async function GET(request: NextRequest) {
     // 6. Save to database
     const { error: dbError } = await supabase.from('accounts').upsert({
       user_id: session.user.id,
-      ig_user_id: String(igAccount.id),
+      ig_id: String(igAccount.id),
       ig_username: igDetail.username || igAccount.username || '',
       access_token: longToken,
-      is_active: true,
-      reply_comment_text: null,
-      public_reply_enabled: true,
-      follow_check_enabled: true,
-      private_reply_text: null,
-      last_synced_at: new Date().toISOString(),
-    }, { onConflict: 'user_id,ig_user_id' })
+    }, { onConflict: 'ig_id' })
 
     if (dbError) {
       console.error('[ig callback] DB error:', dbError)

@@ -8,28 +8,45 @@ import {
   RefreshCw,
   AtSign,
   Users,
-  Link2,
   CheckCircle2,
   AlertCircle,
+  Instagram,
+  ExternalLink,
 } from "lucide-react"
 
 interface Account {
   id: string
-  instagram_username: string
-  is_active: boolean
-  connected_at: string
-  last_synced_at: string | null
-  follower_count: number | null
+  ig_username: string
+  ig_id: string
+  fb_page_id: string | null
+  access_token: string
+  token_expires_at: string | null
+  reply_comment_text: string | null
+  private_reply_text: string | null
+  private_reply_button: string | null
+  dm_body_template: string | null
+  disclosure_text: string | null
+  not_following_text: string | null
+  follow_check_enabled: boolean
+  public_reply_enabled: boolean
+  auto_sync_enabled: boolean
+  created_at: string
+  updated_at: string
 }
 
 export default function AccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
-  const [showModal, setShowModal] = useState(false)
-  const [username, setUsername] = useState("")
-  const [saving, setSaving] = useState(false)
+  const [searchParams, setSearchParams] = useState<URLSearchParams | null>(null)
 
   useEffect(() => {
+    // Check URL params for OAuth result
+    const params = new URLSearchParams(window.location.search)
+    setSearchParams(params)
+    // Clear URL params
+    if (params.toString()) {
+      window.history.replaceState({}, "", "/dashboard/accounts")
+    }
     fetchAccounts()
   }, [])
 
@@ -39,7 +56,7 @@ export default function AccountsPage() {
       const { data } = await supabase
         .from("accounts")
         .select("*")
-        .order("connected_at", { ascending: false })
+        .order("created_at", { ascending: false })
       if (data) setAccounts(data as Account[])
     } catch {
       // table may not exist
@@ -48,50 +65,32 @@ export default function AccountsPage() {
     }
   }
 
-  const handleAdd = async () => {
-    if (!username.trim()) {
-      alert("인스타그램 사용자명을 입력해주세요.")
-      return
-    }
-
-    setSaving(true)
-    const supabase = createClient()
-    try {
-      await supabase.from("accounts").insert({
-        instagram_username: username.trim(),
-        is_active: true,
-      })
-      setShowModal(false)
-      setUsername("")
-      await fetchAccounts()
-    } catch {
-      alert("계정 추가에 실패했습니다.")
-    } finally {
-      setSaving(false)
-    }
+  const handleConnect = () => {
+    window.location.href = "/api/auth/instagram"
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm("정말 삭제하시겠습니까? 연동이 해제됩니다.")) return
+    if (!confirm("Disconnect this Instagram account?")) return
     const supabase = createClient()
     try {
       await supabase.from("accounts").delete().eq("id", id)
       await fetchAccounts()
     } catch {
-      alert("삭제에 실패했습니다.")
+      alert("Failed to disconnect.")
     }
   }
 
-  const handleSync = async (account: Account) => {
+  const handleRefresh = async (account: Account) => {
+    // TODO: refresh long-lived token via Meta API
     const supabase = createClient()
     try {
       await supabase
         .from("accounts")
-        .update({ last_synced_at: new Date().toISOString() })
+        .update({ updated_at: new Date().toISOString() })
         .eq("id", account.id)
       await fetchAccounts()
     } catch {
-      alert("동기화에 실패했습니다.")
+      alert("Failed to refresh.")
     }
   }
 
@@ -100,16 +99,9 @@ export default function AccountsPage() {
     return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, "0")}.${String(date.getDate()).padStart(2, "0")}`
   }
 
-  const timeAgo = (dateStr: string | null) => {
-    if (!dateStr) return "미동기화"
-    const diff = Date.now() - new Date(dateStr).getTime()
-    const mins = Math.floor(diff / 60000)
-    if (mins < 1) return "방금 전"
-    if (mins < 60) return `${mins}분 전`
-    const hours = Math.floor(mins / 60)
-    if (hours < 24) return `${hours}시간 전`
-    const days = Math.floor(hours / 24)
-    return `${days}일 전`
+  const isTokenExpired = (expiresAt: string | null) => {
+    if (!expiresAt) return false
+    return new Date(expiresAt) < new Date()
   }
 
   if (loading) {
@@ -122,35 +114,62 @@ export default function AccountsPage() {
 
   return (
     <div className="space-y-6">
+      {/* OAuth result notifications */}
+      {searchParams?.get("success") === "connected" && (
+        <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-900/20">
+          <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
+          <p className="text-sm text-emerald-800 dark:text-emerald-300">
+            Instagram account connected successfully!
+          </p>
+        </div>
+      )}
+      {searchParams?.get("error") && (
+        <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
+          <AlertCircle className="h-5 w-5 shrink-0 text-red-600" />
+          <p className="text-sm text-red-800 dark:text-red-300">
+            Connection failed. Error: {searchParams.get("error")}
+          </p>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-sm text-zinc-500 dark:text-zinc-400">
-            연동된 계정
+            Connected Accounts
           </h2>
           <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-            {accounts.length}개
+            {accounts.length}
           </p>
         </div>
         <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-hover"
+          onClick={handleConnect}
+          className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:from-purple-700 hover:to-pink-700 hover:shadow-md"
         >
-          <Plus className="h-4 w-4" />
-          계정 추가
+          <Instagram className="h-4 w-4" />
+          Connect Instagram
         </button>
       </div>
 
       {/* Account cards */}
       {accounts.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-white py-16 dark:border-zinc-700 dark:bg-zinc-900">
-          <Users className="mb-3 h-10 w-10 text-zinc-300 dark:text-zinc-600" />
+          <div className="mb-4 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 p-4">
+            <Instagram className="h-8 w-8 text-white" />
+          </div>
           <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-            아직 연동된 계정이 없습니다.
+            No connected accounts yet
           </p>
           <p className="mt-1 text-xs text-zinc-400">
-            인스타그램 계정을 연동하면 댓글을 자동으로 감지합니다.
+            Connect your Instagram account to start auto-DMing links to commenters.
           </p>
+          <button
+            onClick={handleConnect}
+            className="mt-4 flex items-center gap-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-2 text-sm font-medium text-white transition-all hover:from-purple-700 hover:to-pink-700"
+          >
+            <Instagram className="h-4 w-4" />
+            Connect with Instagram
+          </button>
         </div>
       ) : (
         <div className="space-y-3">
@@ -168,100 +187,72 @@ export default function AccountsPage() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                    @{account.instagram_username}
+                    @{account.ig_username}
                   </h3>
-                  {account.is_active ? (
+                  {account.follow_check_enabled && account.public_reply_enabled ? (
                     <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                   ) : (
-                    <AlertCircle className="h-4 w-4 text-zinc-400" />
+                    <AlertCircle className="h-4 w-4 text-amber-500" />
                   )}
-                </div>
-                <div className="mt-0.5 flex items-center gap-3 text-xs text-zinc-500">
-                  <span>연동: {formatDate(account.connected_at)}</span>
-                  {account.follower_count !== null && (
-                    <span>
-                      팔로워: {account.follower_count.toLocaleString()}명
+                  {isTokenExpired(account.token_expires_at) && (
+                    <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                      Token expired
                     </span>
                   )}
                 </div>
+                <div className="mt-0.5 flex items-center gap-3 text-xs text-zinc-500">
+                  <span>Connected: {formatDate(account.created_at)}</span>
+                  <span>Last updated: {formatDate(account.updated_at)}</span>
+                </div>
               </div>
 
-              {/* Sync status */}
-              <div className="hidden items-center gap-2 sm:flex">
-                <div className="flex items-center gap-1 text-xs text-zinc-400">
-                  <RefreshCw className="h-3.5 w-3.5" />
-                  <span>{timeAgo(account.last_synced_at)}</span>
-                </div>
+              {/* Feature tags */}
+              <div className="hidden flex-wrap items-center gap-1.5 sm:flex">
+                {account.public_reply_enabled && (
+                  <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs text-blue-700 dark:bg-blue-900/20 dark:text-blue-400">
+                    Auto Reply
+                  </span>
+                )}
+                {account.follow_check_enabled && (
+                  <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400">
+                    Follow Check
+                  </span>
+                )}
+                {account.auto_sync_enabled && (
+                  <span className="rounded-full bg-purple-50 px-2.5 py-0.5 text-xs text-purple-700 dark:bg-purple-900/20 dark:text-purple-400">
+                    Auto Sync
+                  </span>
+                )}
               </div>
 
               {/* Actions */}
               <div className="flex items-center gap-1">
-                <button
-                  onClick={() => handleSync(account)}
+                <a
+                  href={`https://instagram.com/${account.ig_username}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-primary dark:hover:bg-zinc-800"
-                  title="동기화"
+                  title="Open Instagram"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                </a>
+                <button
+                  onClick={() => handleRefresh(account)}
+                  className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-primary dark:hover:bg-zinc-800"
+                  title="Refresh token"
                 >
                   <RefreshCw className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => handleDelete(account.id)}
                   className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20"
-                  title="연동 해제"
+                  title="Disconnect"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
             </div>
           ))}
-        </div>
-      )}
-
-      {/* Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-zinc-900">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="rounded-lg bg-primary-light p-2 dark:bg-primary/10">
-                <AtSign className="h-5 w-5 text-primary" />
-              </div>
-              <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-                인스타그램 계정 연동
-              </h2>
-            </div>
-
-            <p className="mb-4 text-sm text-zinc-500 dark:text-zinc-400">
-              연동할 인스타그램 계정의 사용자명을 입력하세요.
-              공식 API 연동이 필요할 수 있습니다.
-            </p>
-
-            <div className="relative">
-              <Link2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full rounded-lg border border-zinc-200 bg-white py-2.5 pl-10 pr-3 text-sm text-zinc-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-                placeholder="instagram_username"
-                onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-              />
-            </div>
-
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                onClick={() => setShowModal(false)}
-                className="rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-              >
-                취소
-              </button>
-              <button
-                onClick={handleAdd}
-                disabled={saving}
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-hover disabled:opacity-60"
-              >
-                {saving ? "연동 중..." : "연동하기"}
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </div>
