@@ -8,7 +8,9 @@ function getEnv(key: string): string {
 
 // GET /api/auth/instagram — redirect to Instagram Business Login
 export async function GET(request: NextRequest) {
-  const CLIENT_ID = getEnv('INSTAGRAM_CLIENT_ID')
+  // Use META_APP_ID for Facebook Login OAuth
+  const CLIENT_ID = getEnv('META_APP_ID')
+  const APP_SECRET = getEnv('META_APP_SECRET')
   const APP_URL = getEnv('NEXT_PUBLIC_APP_URL')
   const REDIRECT_URI = `${APP_URL}/api/auth/instagram/callback`
 
