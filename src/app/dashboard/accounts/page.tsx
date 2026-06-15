@@ -81,7 +81,9 @@ function AccountsContent() {
       router.replace("/dashboard/accounts")
     } else if (error) {
       const msg = ERROR_MESSAGES[error] || ERROR_MESSAGES.unknown
-      setStatus({ type: "error", message: msg })
+      const detail = searchParams.get("detail")
+      const fullMsg = detail ? `${msg}\n\n[Detail] ${decodeURIComponent(detail)}` : msg
+      setStatus({ type: "error", message: fullMsg })
       router.replace("/dashboard/accounts")
     }
   }, [searchParams, router])
