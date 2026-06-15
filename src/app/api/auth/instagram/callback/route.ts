@@ -10,6 +10,10 @@ function getEnv(key: string): string {
 const _ek = Buffer.from("TUVUQV9BUFBfU0VDUkVU", "base64").toString()
 
 export async function GET(request: NextRequest) {
+  // Debug: log the FULL incoming URL to see what Instagram actually redirected to
+  console.log("[ig callback] FULL request.url:", request.url)
+  console.log("[ig callback] ALL search params:", Object.fromEntries(new URL(request.url).searchParams))
+
   const { searchParams } = new URL(request.url)
   const code = searchParams.get("code")
   const state = searchParams.get("state")
@@ -19,6 +23,8 @@ export async function GET(request: NextRequest) {
   const APP_SECRET = (process.env as Record<string, string>)[_ek] || (() => { throw new Error("Missing META_APP_SECRET") })()
   const APP_URL = getEnv("NEXT_PUBLIC_APP_URL")
   const REDIRECT_URI = `${APP_URL}/api/auth/instagram/callback`
+  console.log("[ig callback] APP_URL:", APP_URL)
+  console.log("[ig callback] REDIRECT_URI we will POST:", REDIRECT_URI)
 
   // Check CSRF state
   const savedState = request.cookies.get("ig_oauth_state")?.value
