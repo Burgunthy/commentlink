@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   const errorParam = searchParams.get("error")
 
   const CLIENT_ID = getEnv("INSTAGRAM_CLIENT_ID")
-  const APP_SECRET=getEnv("META_APP_SECRET")
+  const APP_SECRET=getEnv("INSTAGRAM_APP_SECRET")
   const APP_URL = getEnv("NEXT_PUBLIC_APP_URL")
   const REDIRECT_URI = `${APP_URL}/api/auth/instagram/callback`
 
