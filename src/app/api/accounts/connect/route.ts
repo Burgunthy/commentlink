@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { expiryFromTtl } from '@/lib/instagram'
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,11 +21,15 @@ export async function POST(request: NextRequest) {
 
     // 1. Exchange for long-lived token if short-lived
     let longToken = token
+    let expiresIn: number | null = null
     try {
       const exUrl = `https://graph.facebook.com/v25.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${token}`
       const exResp = await fetch(exUrl)
       const exData = await exResp.json()
-      if (exData.access_token) longToken = exData.access_token
+      if (exData.access_token) {
+        longToken = exData.access_token
+        if (typeof exData.expires_in === 'number') expiresIn = exData.expires_in
+      }
     } catch { /* keep original token */ }
 
     // 2. Get Facebook Pages with Instagram Business accounts
@@ -74,11 +79,13 @@ export async function POST(request: NextRequest) {
     }
 
     // 6. Save to database
+    const tokenExpiresAt = expiryFromTtl(expiresIn)
     const { error: dbError } = await supabase.from('accounts').upsert({
       user_id: session.user.id,
       ig_id: String(igAccount.id),
       ig_username: igDetail.username || igAccount.username || '',
       access_token: longToken,
+      ...(tokenExpiresAt ? { token_expires_at: tokenExpiresAt } : {}),
     }, { onConflict: 'ig_id' })
 
     if (dbError) {

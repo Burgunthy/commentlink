@@ -3,40 +3,34 @@
 import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import {
-  BarChart3,
   MessageSquare,
+  Send,
+  Images,
   Users,
-  Package,
   TrendingUp,
-  ArrowUpRight,
-  ArrowDownRight,
 } from "lucide-react"
 
 interface Stats {
   totalComments: number
-  totalClicks: number
-  totalProducts: number
+  totalDmsSent: number
+  activePosts: number
   totalAccounts: number
-  commentsChange: number
-  clicksChange: number
 }
 
 interface RecentComment {
   id: string
   username: string
   content: string
-  product_name: string
+  status: string
   created_at: string
 }
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stats>({
     totalComments: 0,
-    totalClicks: 0,
-    totalProducts: 0,
+    totalDmsSent: 0,
+    activePosts: 0,
     totalAccounts: 0,
-    commentsChange: 0,
-    clicksChange: 0,
   })
   const [recentComments, setRecentComments] = useState<RecentComment[]>([])
   const [loading, setLoading] = useState(true)
@@ -45,50 +39,54 @@ export default function DashboardPage() {
     async function fetchDashboardData() {
       const supabase = createClient()
       try {
-        // Fetch comment counts
+        // Total tracked comments (one conversation per inbound comment)
         const { count: totalComments } = await supabase
-          .from("comments")
+          .from("conversations")
           .select("*", { count: "exact", head: true })
 
-        // Fetch product counts
-        const { count: totalProducts } = await supabase
-          .from("products")
+        // DMs actually delivered
+        const { count: totalDmsSent } = await supabase
+          .from("conversations")
           .select("*", { count: "exact", head: true })
+          .not("dm_sent_at", "is", null)
 
-        // Fetch account counts
+        // Posts with automation enabled
+        const { count: activePosts } = await supabase
+          .from("posts")
+          .select("*", { count: "exact", head: true })
+          .eq("is_active", true)
+
+        // Connected Instagram accounts
         const { count: totalAccounts } = await supabase
           .from("accounts")
           .select("*", { count: "exact", head: true })
 
-        // Fetch recent comments with product info
-        const { data: comments } = await supabase
-          .from("comments")
-          .select("id, username, content, created_at, products(name)")
+        setStats({
+          totalComments: totalComments ?? 0,
+          totalDmsSent: totalDmsSent ?? 0,
+          activePosts: activePosts ?? 0,
+          totalAccounts: totalAccounts ?? 0,
+        })
+
+        const { data: conversations } = await supabase
+          .from("conversations")
+          .select("id, username, comment_text, status, created_at")
           .order("created_at", { ascending: false })
           .limit(5)
 
-        setStats({
-          totalComments: totalComments ?? 0,
-          totalClicks: 0,
-          totalProducts: totalProducts ?? 0,
-          totalAccounts: totalAccounts ?? 0,
-          commentsChange: 12.5,
-          clicksChange: 8.3,
-        })
-
-        if (comments) {
+        if (conversations) {
           setRecentComments(
-            comments.map((c) => ({
+            conversations.map((c) => ({
               id: c.id,
-              username: c.username,
-              content: c.content,
-              product_name: (c.products as unknown as { name: string })?.name ?? "-",
+              username: c.username ?? "",
+              content: c.comment_text ?? "",
+              status: c.status ?? "received",
               created_at: c.created_at,
             }))
           )
         }
       } catch {
-        // Table may not exist yet — use defaults
+        // Tables may not exist yet — use defaults
       } finally {
         setLoading(false)
       }
@@ -98,35 +96,28 @@ export default function DashboardPage() {
   }, [])
 
   const statCards = [
-    {
-      label: "Total Comments",
-      value: stats.totalComments,
-      change: stats.commentsChange,
-      icon: MessageSquare,
-    },
-    {
-      label: "Total Clicks",
-      value: stats.totalClicks,
-      change: stats.clicksChange,
-      icon: BarChart3,
-    },
-    {
-      label: "Registered Products",
-      value: stats.totalProducts,
-      change: null,
-      icon: Package,
-    },
-    {
-      label: "Connected Accounts",
-      value: stats.totalAccounts,
-      change: null,
-      icon: Users,
-    },
+    { label: "Total Comments", value: stats.totalComments, icon: MessageSquare },
+    { label: "DMs Sent", value: stats.totalDmsSent, icon: Send },
+    { label: "Active Posts", value: stats.activePosts, icon: Images },
+    { label: "Connected Accounts", value: stats.totalAccounts, icon: Users },
   ]
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
     return `${date.getMonth() + 1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2, "0")}`
+  }
+
+  const statusPill = (status: string) => {
+    if (status === "confirmed" || status === "dm_sent" || status === "done") {
+      return { label: "DM Sent", className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" }
+    }
+    if (status === "replied") {
+      return { label: "Replied", className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" }
+    }
+    if (status === "failed" || status === "error") {
+      return { label: "Failed", className: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" }
+    }
+    return { label: "Received", className: "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400" }
   }
 
   if (loading) {
@@ -159,24 +150,6 @@ export default function DashboardPage() {
               <p className="mt-3 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
                 {card.value.toLocaleString()}
               </p>
-              {card.change !== null && (
-                <div className="mt-1 flex items-center gap-1 text-xs font-medium">
-                  {card.change >= 0 ? (
-                    <>
-                      <ArrowUpRight className="h-3.5 w-3.5 text-emerald-500" />
-                      <span className="text-emerald-500">
-                        +{card.change}%
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <ArrowDownRight className="h-3.5 w-3.5 text-red-500" />
-                      <span className="text-red-500">{card.change}%</span>
-                    </>
-                  )}
-                  <span className="text-zinc-400">Last 7 days</span>
-                </div>
-              )}
             </div>
           )
         })}
@@ -198,35 +171,38 @@ export default function DashboardPage() {
           <div className="flex flex-col items-center justify-center py-12 text-zinc-400">
             <MessageSquare className="mb-3 h-10 w-10" />
             <p className="text-sm">No comment data yet.</p>
-            <p className="mt-1 text-xs">Connect your Instagram account and add products to get started.</p>
+            <p className="mt-1 text-xs">Connect your Instagram account and enable posts to get started.</p>
           </div>
         ) : (
           <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-            {recentComments.map((comment) => (
-              <div key={comment.id} className="flex items-start gap-4 px-5 py-3">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-light dark:bg-primary/10">
-                  <span className="text-xs font-bold text-primary">
-                    {comment.username.charAt(0).toUpperCase()}
-                  </span>
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                      @{comment.username}
-                    </span>
-                    <span className="rounded-full bg-primary-light px-2 py-0.5 text-xs font-medium text-primary dark:bg-primary/10">
-                      {comment.product_name}
+            {recentComments.map((comment) => {
+              const pill = statusPill(comment.status)
+              return (
+                <div key={comment.id} className="flex items-start gap-4 px-5 py-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-light dark:bg-primary/10">
+                    <span className="text-xs font-bold text-primary">
+                      {comment.username.charAt(0).toUpperCase() || "?"}
                     </span>
                   </div>
-                  <p className="mt-0.5 truncate text-sm text-zinc-600 dark:text-zinc-400">
-                    {comment.content}
-                  </p>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                        @{comment.username || "unknown"}
+                      </span>
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${pill.className}`}>
+                        {pill.label}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 truncate text-sm text-zinc-600 dark:text-zinc-400">
+                      {comment.content}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-xs text-zinc-400">
+                    {formatDate(comment.created_at)}
+                  </span>
                 </div>
-                <span className="shrink-0 text-xs text-zinc-400">
-                  {formatDate(comment.created_at)}
-                </span>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>

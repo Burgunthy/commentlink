@@ -5,21 +5,21 @@ import { usePathname } from "next/navigation"
 import {
   LayoutDashboard,
   Settings,
-  Package,
   Users,
   Link2,
   LogOut,
   Menu,
   X,
   Image,
+  MessagesSquare,
 } from "lucide-react"
 import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard/history", label: "History", icon: MessagesSquare },
   { href: "/dashboard/posts", label: "Posts", icon: Image },
-  { href: "/dashboard/products", label: "Products", icon: Package },
   { href: "/dashboard/accounts", label: "Accounts", icon: Users },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ]

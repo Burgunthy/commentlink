@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { expiryFromTtl } from "@/lib/instagram"
 
 function getEnv(key: string): string {
   const val = process.env[key]
@@ -79,6 +80,8 @@ export async function GET(request: NextRequest) {
     }
 
     const longToken = longData.access_token
+    // Long-lived IG tokens last ~60 days; record the expiry so it can be refreshed.
+    const tokenExpiresAt = expiryFromTtl(longData.expires_in)
 
     // 3. Get Instagram user details
     const igDetailResp = await fetch(
@@ -105,6 +108,7 @@ export async function GET(request: NextRequest) {
       ig_id: String(igUserId),
       ig_username: igDetail.username || "",
       access_token: longToken,
+      ...(tokenExpiresAt ? { token_expires_at: tokenExpiresAt } : {}),
     }, { onConflict: "ig_id" })
 
     if (dbError) {

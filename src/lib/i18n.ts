@@ -62,7 +62,7 @@ export const translations: Record<Lang, Record<string, string>> = {
     'cta.button': 'Get Started Free →',
 
     // Footer
-    'footer.copyright': '© 2025 DMify. All rights reserved.',
+    'footer.copyright': '© 2026 DMify. All rights reserved.',
     'footer.terms': 'Terms of Service',
     'footer.privacy': 'Privacy Policy',
   },
@@ -128,7 +128,7 @@ export const translations: Record<Lang, Record<string, string>> = {
     'cta.button': '무료로 시작하기 →',
 
     // Footer
-    'footer.copyright': '© 2025 DMify. All rights reserved.',
+    'footer.copyright': '© 2026 DMify. All rights reserved.',
     'footer.terms': '이용약관',
     'footer.privacy': '개인정보 처리방침',
   },

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { getServiceClient } from '@/lib/supabase/server'
+import { ensureFreshToken } from '@/lib/instagram'
 import * as crypto from 'crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -91,7 +92,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  const supabase = await createClient()
+  // Webhooks have no user session, so anon/cookie auth cannot satisfy RLS.
+  // Use the service-role client (bypasses RLS) — see schema.sql note.
+  const supabase = await getServiceClient()
 
   for (const entry of data.entry || []) {
     for (const change of entry.changes) {
@@ -114,6 +117,7 @@ interface WebhookCommentValue {
 interface AccountRow {
   id: string
   access_token: string
+  token_expires_at: string | null
   ig_username: string
   reply_comment_text: string
   public_reply_enabled: boolean
@@ -219,7 +223,7 @@ async function handleComment(supabase: SupabaseClient, value: WebhookCommentValu
     .from('posts')
     .select(
       `id, account_id, media_id, dm_message, dm_link_url, public_reply_text, not_following_dm, not_following_link, ` +
-      `accounts!inner(id, access_token, ig_username, reply_comment_text, public_reply_enabled, follow_check_enabled, private_reply_text, not_following_text)`
+      `accounts!inner(id, access_token, token_expires_at, ig_username, reply_comment_text, public_reply_enabled, follow_check_enabled, private_reply_text, not_following_text)`
     )
     .eq('media_id', mediaId)
     .eq('is_active', true)
@@ -264,48 +268,93 @@ async function handleComment(supabase: SupabaseClient, value: WebhookCommentValu
     commentText.toLowerCase().includes(kw.keyword.toLowerCase())
   )
 
+  // Refresh the access token if it is close to expiry before any API call.
+  // Falls back to the existing token on refresh failure (may still be valid).
+  const accessToken = await ensureFreshToken(supabase, {
+    id: account.id,
+    access_token: account.access_token,
+    token_expires_at: account.token_expires_at,
+  })
+
   // Follow check via Instagram Graph API (defaults to true on error).
   // Only run it when follow-gating is on; it's only used for DM routing.
   let isFollower = true
   if (account.follow_check_enabled) {
-    isFollower = await checkIsFollower(igUserId, account.access_token)
+    isFollower = await checkIsFollower(igUserId, accessToken)
   }
+
+  const nowIso = new Date().toISOString()
 
   // Step 1: Public reply to comment
   const publicReplyText = buildPublicReply(account, typedPost)
   if (account.public_reply_enabled && publicReplyText) {
-    await igApi(`${mediaId}/comments`, {
-      access_token: account.access_token,
-      message: `@${username} ${publicReplyText}`,
-    }, 'POST')
+    try {
+      const replyRes = await igApi(`${mediaId}/comments`, {
+        access_token: accessToken,
+        message: `@${username} ${publicReplyText}`,
+      }, 'POST')
 
-    await supabase.from('conversations')
-      .update({ status: 'replied', replied_at: new Date().toISOString() })
-      .eq('comment_id', commentId)
+      if (replyRes?.error) {
+        console.error('[webhook:error] public reply rejected:', JSON.stringify(replyRes.error))
+        await markFailed(supabase, commentId, `public_reply: ${replyRes.error.message ?? 'unknown'}`)
+      } else {
+        await supabase.from('conversations')
+          .update({ status: 'replied', replied_at: nowIso })
+          .eq('comment_id', commentId)
+      }
+    } catch (err) {
+      console.error('[webhook:error] public reply threw:', err)
+      await markFailed(supabase, commentId, `public_reply: ${String(err)}`)
+    }
   }
 
-  // Step 2: Private DM reply
+  // Step 2: Private DM reply (independent of the public reply outcome)
   if (account.follow_check_enabled) {
     const dmMessage = buildDmMessage(account, typedPost, matchedKeyword, isFollower)
 
     if (dmMessage) {
-      await igApi(
-        'me/messages',
-        { access_token: account.access_token },
-        'POST',
-        {
-          recipient: { id: igUserId },
-          message: { text: dmMessage },
-        }
-      )
-    }
+      try {
+        const dmRes = await igApi(
+          'me/messages',
+          { access_token: accessToken },
+          'POST',
+          {
+            recipient: { id: igUserId },
+            message: { text: dmMessage },
+          }
+        )
 
-    await supabase.from('conversations')
-      .update({ status: 'confirmed' })
-      .eq('comment_id', commentId)
+        if (dmRes?.error) {
+          console.error('[webhook:error] DM rejected:', JSON.stringify(dmRes.error))
+          await markFailed(supabase, commentId, `dm: ${dmRes.error.message ?? 'unknown'}`)
+        } else {
+          await supabase.from('conversations')
+            .update({ status: 'confirmed', dm_sent_at: nowIso })
+            .eq('comment_id', commentId)
+        }
+      } catch (err) {
+        console.error('[webhook:error] DM threw:', err)
+        await markFailed(supabase, commentId, `dm: ${String(err)}`)
+      }
+    }
   }
 
   console.log(`[webhook] Processed comment ${commentId} from @${username}` +
     (matchedKeyword ? ` [keyword: "${matchedKeyword.keyword}"]` : '') +
     ` [follower: ${isFollower}]`)
+}
+
+/**
+ * Mark a conversation as failed and persist the error reason. Best-effort: a
+ * failure to write the status is logged but never rethrown, so it cannot mask
+ * the original error or break the webhook response.
+ */
+async function markFailed(supabase: SupabaseClient, commentId: string, errorMessage: string) {
+  const truncated = errorMessage.slice(0, 500)
+  const { error } = await supabase.from('conversations')
+    .update({ status: 'failed', error_message: truncated })
+    .eq('comment_id', commentId)
+  if (error) {
+    console.error('[webhook:error] could not persist failure status:', error.message)
+  }
 }
