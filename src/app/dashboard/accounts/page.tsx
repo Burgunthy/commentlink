@@ -17,6 +17,7 @@ import {
   MessageSquare,
   Send,
   UserX,
+  RefreshCw,
 } from "lucide-react"
 
 interface Account {
@@ -63,6 +64,36 @@ const ERROR_MESSAGES: Record<string, string> = {
   unknown: "An unexpected error occurred. Please try again.",
 }
 
+type TokenStatusKey = "valid" | "expiring" | "expired" | "unknown"
+
+interface TokenStatus {
+  key: TokenStatusKey
+  label: string
+  dot: string
+  text: string
+}
+
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
+
+/** Classify an account's token expiry into a status badge. */
+function tokenStatus(expiresAt: string | null): TokenStatus {
+  if (!expiresAt) {
+    return { key: "unknown", label: "Unknown", dot: "bg-zinc-400", text: "text-zinc-500 dark:text-zinc-400" }
+  }
+  const expires = Date.parse(expiresAt)
+  if (Number.isNaN(expires)) {
+    return { key: "unknown", label: "Unknown", dot: "bg-zinc-400", text: "text-zinc-500 dark:text-zinc-400" }
+  }
+  const now = Date.now()
+  if (expires < now) {
+    return { key: "expired", label: "Expired", dot: "bg-red-500", text: "text-red-600 dark:text-red-400" }
+  }
+  if (expires - now <= SEVEN_DAYS_MS) {
+    return { key: "expiring", label: "Expiring Soon", dot: "bg-amber-500", text: "text-amber-600 dark:text-amber-400" }
+  }
+  return { key: "valid", label: "Valid", dot: "bg-emerald-500", text: "text-emerald-600 dark:text-emerald-400" }
+}
+
 export default function AccountsPage() {
   return (
     <Suspense
@@ -91,6 +122,7 @@ function AccountsContent() {
     not_following_text: "",
   })
   const [saving, setSaving] = useState(false)
+  const [refreshingId, setRefreshingId] = useState<string | null>(null)
   const searchParams = useSearchParams()
   const router = useRouter()
 
@@ -143,6 +175,23 @@ function AccountsContent() {
       await fetchAccounts()
     } catch {
       alert("Failed to disconnect.")
+    }
+  }
+
+  const handleRefreshToken = async (id: string) => {
+    setRefreshingId(id)
+    try {
+      const res = await fetch(`/api/accounts/${id}/refresh-token`, { method: "POST" })
+      const json = (await res.json()) as { error?: string }
+      if (!res.ok) {
+        alert(json.error || "토큰 갱신에 실패했습니다.")
+        return
+      }
+      await fetchAccounts()
+    } catch {
+      alert("토큰 갱신에 실패했습니다.")
+    } finally {
+      setRefreshingId(null)
     }
   }
 
@@ -276,66 +325,84 @@ function AccountsContent() {
         </div>
       ) : (
         <div className="space-y-3">
-          {accounts.map((account) => (
-            <div
-              key={account.id}
-              className="flex items-center gap-4 rounded-xl border border-zinc-200 bg-white p-4 transition-shadow hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900"
-            >
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-pink-500">
-                <AtSign className="h-6 w-6 text-white" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                    @{account.ig_username}
-                  </h3>
-                  {account.follow_check_enabled && account.public_reply_enabled ? (
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                  ) : (
-                    <AlertCircle className="h-4 w-4 text-amber-500" />
+          {accounts.map((account) => {
+            const tStatus = tokenStatus(account.token_expires_at)
+            return (
+              <div
+                key={account.id}
+                className="flex items-center gap-4 rounded-xl border border-zinc-200 bg-white p-4 transition-shadow hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900"
+              >
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-pink-500">
+                  <AtSign className="h-6 w-6 text-white" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                      @{account.ig_username}
+                    </h3>
+                    {account.follow_check_enabled && account.public_reply_enabled ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4 text-amber-500" />
+                    )}
+                  </div>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
+                    <span>Connected: {formatDate(account.created_at)}</span>
+                    <span className={`flex items-center gap-1.5 font-medium ${tStatus.text}`} title="Token status">
+                      <span className={`inline-block h-2 w-2 rounded-full ${tStatus.dot}`} />
+                      Token: {tStatus.label}
+                    </span>
+                  </div>
+                </div>
+                <div className="hidden flex-wrap items-center gap-1.5 sm:flex">
+                  {account.public_reply_enabled && (
+                    <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs text-blue-700 dark:bg-blue-900/20 dark:text-blue-400">
+                      Auto Reply
+                    </span>
+                  )}
+                  {account.follow_check_enabled && (
+                    <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400">
+                      Follow Check
+                    </span>
                   )}
                 </div>
-                <div className="mt-0.5 flex items-center gap-3 text-xs text-zinc-500">
-                  <span>Connected: {formatDate(account.created_at)}</span>
+                <div className="flex items-center gap-1">
+                  {(tStatus.key === "expired" || tStatus.key === "expiring") && (
+                    <button
+                      onClick={() => handleRefreshToken(account.id)}
+                      disabled={refreshingId === account.id}
+                      className="flex items-center gap-1 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                      title="토큰 갱신"
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${refreshingId === account.id ? "animate-spin" : ""}`} />
+                      <span className="hidden sm:inline">토큰 갱신</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => openSettings(account)}
+                    className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+                    title="설정"
+                  >
+                    <Settings className="h-4 w-4" />
+                  </button>
+                  <a
+                    href={`https://instagram.com/${account.ig_username}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-primary dark:hover:bg-zinc-800"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                  <button
+                    onClick={() => handleDelete(account.id)}
+                    className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
-              <div className="hidden flex-wrap items-center gap-1.5 sm:flex">
-                {account.public_reply_enabled && (
-                  <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs text-blue-700 dark:bg-blue-900/20 dark:text-blue-400">
-                    Auto Reply
-                  </span>
-                )}
-                {account.follow_check_enabled && (
-                  <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400">
-                    Follow Check
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => openSettings(account)}
-                  className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
-                  title="설정"
-                >
-                  <Settings className="h-4 w-4" />
-                </button>
-                <a
-                  href={`https://instagram.com/${account.ig_username}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-primary dark:hover:bg-zinc-800"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                </a>
-                <button
-                  onClick={() => handleDelete(account.id)}
-                  className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 

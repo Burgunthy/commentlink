@@ -81,6 +81,10 @@ export default function HistoryPage() {
   const [search, setSearch] = useState("")
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<ConversationRow | null>(null)
+  const [resending, setResending] = useState(false)
+
+  // Statuses for which a manual DM re-send is meaningful.
+  const RESENDABLE_STATUSES = ["confirmed", "dm_sent", "done", "replied", "failed"]
 
   // Load accounts once for the account filter
   useEffect(() => {
@@ -167,6 +171,42 @@ export default function HistoryPage() {
     const d = new Date(dateStr)
     const pad = (n: number) => String(n).padStart(2, "0")
     return `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+  }
+
+  const handleResendDm = async () => {
+    if (!selected) return
+    setResending(true)
+    try {
+      const res = await fetch(`/api/conversations/${selected.id}/resend-dm`, {
+        method: "POST",
+      })
+      const json = (await res.json()) as {
+        error?: string
+        data?: { status: string; dm_sent_at: string }
+      }
+      if (!res.ok) {
+        alert(json.error || "DM 재전송에 실패했습니다.")
+        return
+      }
+      const newStatus = json.data?.status ?? selected.status
+      const newDmSentAt = json.data?.dm_sent_at ?? selected.dm_sent_at
+      setSelected((prev) =>
+        prev
+          ? { ...prev, status: newStatus, dm_sent_at: newDmSentAt, error_message: null }
+          : prev
+      )
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === selected.id
+            ? { ...c, status: newStatus, dm_sent_at: newDmSentAt, error_message: null }
+            : c
+        )
+      )
+    } catch {
+      alert("DM 재전송에 실패했습니다.")
+    } finally {
+      setResending(false)
+    }
   }
 
   return (
@@ -483,6 +523,20 @@ export default function HistoryPage() {
                     <span>user_igsid: {selected.user_igsid}</span>
                   </div>
                 </div>
+
+                {/* Footer: manual DM re-send */}
+                {RESENDABLE_STATUSES.includes((selected.status || "").toLowerCase()) && (
+                  <div className="flex items-center justify-end gap-3 border-t border-zinc-200 p-5 dark:border-zinc-800">
+                    <button
+                      onClick={handleResendDm}
+                      disabled={resending}
+                      className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-hover disabled:opacity-60"
+                    >
+                      <Send className="h-4 w-4" />
+                      {resending ? "전송 중..." : "DM 재전송"}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )

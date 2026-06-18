@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServiceClient } from '@/lib/supabase/server'
 import { ensureFreshToken } from '@/lib/instagram'
+import {
+  buildDmMessage,
+  buildPublicReply,
+  substituteVariables,
+  matchesAnyKeyword,
+  type AccountRow,
+  type PostRow,
+  type PostKeywordRow,
+} from '@/lib/dm'
 import * as crypto from 'crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -114,96 +123,48 @@ interface WebhookCommentValue {
   text: string
 }
 
-interface AccountRow {
-  id: string
-  access_token: string
-  token_expires_at: string | null
-  ig_username: string
-  reply_comment_text: string
-  public_reply_enabled: boolean
-  follow_check_enabled: boolean
-  private_reply_text: string
-  not_following_text: string | null
+/** Single-row `settings` table shape (only the fields the webhook needs). */
+interface SettingsRow {
+  dm_template: string | null
+  comment_keyword: string | null
+  auto_reply_enabled: boolean | null
 }
 
-interface PostKeywordRow {
-  id: string
-  keyword: string
-  dm_message: string | null
-  dm_link_url: string | null
-  not_following_dm: string | null
-  not_following_link: string | null
-  sort_order: number
-}
-
-interface PostRow {
-  id: string
-  account_id: string
-  media_id: string
-  dm_message: string | null
-  dm_link_url: string | null
-  public_reply_text: string | null
-  not_following_dm: string | null
-  not_following_link: string | null
-  accounts: AccountRow
+/** Whether a template references the `{post_url}` placeholder. */
+function templateNeedsPermalink(template: string): boolean {
+  return /\{post_url\}/.test(template)
 }
 
 /**
- * Build the final DM message with priority:
- *   keyword match > post-level setting > account-level fallback
+ * Derive a `{product_name}` value for a settings template. The posts table has
+ * no dedicated product-name column, so we fall back to the first line of the
+ * caption (truncated), then to the product URL.
  */
-function buildDmMessage(
-  account: AccountRow,
-  post: PostRow,
-  matchedKeyword: PostKeywordRow | undefined,
-  isFollower: boolean
-): string {
-  let dmMessage: string
-  let linkUrl: string
-
-  if (isFollower) {
-    dmMessage =
-      matchedKeyword?.dm_message ||
-      post.dm_message ||
-      account.private_reply_text ||
-      ''
-    linkUrl =
-      matchedKeyword?.dm_link_url ||
-      post.dm_link_url ||
-      ''
-  } else {
-    dmMessage =
-      matchedKeyword?.not_following_dm ||
-      post.not_following_dm ||
-      account.not_following_text ||
-      matchedKeyword?.dm_message ||
-      post.dm_message ||
-      account.private_reply_text ||
-      ''
-    linkUrl =
-      matchedKeyword?.not_following_link ||
-      post.not_following_link ||
-      matchedKeyword?.dm_link_url ||
-      post.dm_link_url ||
-      ''
-  }
-
-  if (linkUrl && dmMessage) {
-    dmMessage = dmMessage + '\n\n🔗 ' + linkUrl
-  }
-
-  return dmMessage
+function deriveProductName(caption: string | null | undefined, productUrl: string): string {
+  const firstLine = (caption || '')
+    .split('\n')
+    .map(l => l.trim())
+    .find(Boolean)
+  if (firstLine) return firstLine.length > 40 ? firstLine.slice(0, 40) + '…' : firstLine
+  return productUrl
 }
 
 /**
- * Build the public reply text with priority:
- *   post-level override > account-level setting
+ * Fetch a media's permalink via the Graph API. Best-effort: returns '' on any
+ * error so a missing permalink never blocks the DM.
  */
-function buildPublicReply(
-  account: AccountRow,
-  post: PostRow
-): string | null {
-  return post.public_reply_text || account.reply_comment_text || null
+async function fetchPermalink(mediaId: string, accessToken: string): Promise<string> {
+  try {
+    const res = (await igApi(mediaId, {
+      fields: 'permalink',
+      access_token: accessToken,
+    })) as { permalink?: string; error?: unknown }
+    if (res.error) return ''
+    return res.permalink || ''
+  } catch (err) {
+    console.log('[webhook] permalink fetch threw, defaulting to empty:', err)
+    return ''
+  }
 }
 
 async function handleComment(supabase: SupabaseClient, value: WebhookCommentValue) {
@@ -222,7 +183,7 @@ async function handleComment(supabase: SupabaseClient, value: WebhookCommentValu
   const { data: post } = await supabase
     .from('posts')
     .select(
-      `id, account_id, media_id, dm_message, dm_link_url, public_reply_text, not_following_dm, not_following_link, ` +
+      `id, account_id, media_id, caption, dm_message, dm_link_url, public_reply_text, not_following_dm, not_following_link, ` +
       `accounts!inner(id, access_token, token_expires_at, ig_username, reply_comment_text, public_reply_enabled, follow_check_enabled, private_reply_text, not_following_text)`
     )
     .eq('media_id', mediaId)
@@ -236,6 +197,15 @@ async function handleComment(supabase: SupabaseClient, value: WebhookCommentValu
 
   const typedPost = post as unknown as PostRow
   const account = typedPost.accounts
+
+  // Load global settings (single row). Used as the final fallback when the post
+  // has no per-post/per-keyword automation configured. Best-effort: a missing
+  // or empty settings row just disables the fallback.
+  const { data: settingsRow } = await supabase
+    .from('settings')
+    .select('dm_template, comment_keyword, auto_reply_enabled')
+    .single()
+  const settings = (settingsRow ?? null) as SettingsRow | null
 
   const { data: existing } = await supabase
     .from('conversations')
@@ -308,9 +278,36 @@ async function handleComment(supabase: SupabaseClient, value: WebhookCommentValu
     }
   }
 
-  // Step 2: Private DM reply (independent of the public reply outcome)
-  if (account.follow_check_enabled) {
-    const dmMessage = buildDmMessage(account, typedPost, matchedKeyword, isFollower)
+  // Step 2: Private DM reply (independent of the public reply outcome).
+  //
+  // A DM is eligible when the account has DM-sending on (follow_check_enabled)
+  // OR the comment matched a global settings keyword (gated by
+  // settings.auto_reply_enabled). The message body resolves as:
+  //   post keyword > post dm_message > account fallback   (buildDmMessage)
+  //   settings.dm_template                                (global fallback)
+  // The settings template is only used when nothing more specific matched and
+  // the global keyword actually triggered the DM.
+  const settingsKeywordMatched =
+    Boolean(settings?.auto_reply_enabled) &&
+    matchesAnyKeyword(commentText, settings?.comment_keyword)
+
+  const dmWanted = account.follow_check_enabled || settingsKeywordMatched
+  let usedSettingsFallback = false
+  if (dmWanted) {
+    let dmMessage = buildDmMessage(account, typedPost, matchedKeyword, isFollower)
+
+    if (!dmMessage && settingsKeywordMatched && settings?.dm_template) {
+      const permalink = templateNeedsPermalink(settings.dm_template)
+        ? await fetchPermalink(mediaId, accessToken)
+        : ''
+      dmMessage = substituteVariables(settings.dm_template, {
+        username,
+        post_url: permalink,
+        product_name: deriveProductName(typedPost.caption, typedPost.dm_link_url || ''),
+        product_url: typedPost.dm_link_url || '',
+      })
+      usedSettingsFallback = true
+    }
 
     if (dmMessage) {
       try {
@@ -339,9 +336,12 @@ async function handleComment(supabase: SupabaseClient, value: WebhookCommentValu
     }
   }
 
-  console.log(`[webhook] Processed comment ${commentId} from @${username}` +
-    (matchedKeyword ? ` [keyword: "${matchedKeyword.keyword}"]` : '') +
-    ` [follower: ${isFollower}]`)
+  console.log(
+    `[webhook] Processed comment ${commentId} from @${username}` +
+      (matchedKeyword ? ` [keyword: "${matchedKeyword.keyword}"]` : '') +
+      (usedSettingsFallback ? ' [settings fallback]' : '') +
+      ` [follower: ${isFollower}]`
+  )
 }
 
 /**

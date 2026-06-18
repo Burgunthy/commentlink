@@ -12,6 +12,7 @@ import {
   X,
   Image,
   MessagesSquare,
+  Gift,
 } from "lucide-react"
 import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
@@ -21,6 +22,7 @@ const navItems = [
   { href: "/dashboard/history", label: "History", icon: MessagesSquare },
   { href: "/dashboard/posts", label: "Posts", icon: Image },
   { href: "/dashboard/accounts", label: "Accounts", icon: Users },
+  { href: "/dashboard/raffle", label: "Raffle", icon: Gift },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ]
 

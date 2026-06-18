@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
 import {
   MessageSquare,
@@ -8,6 +8,9 @@ import {
   Images,
   Users,
   TrendingUp,
+  Percent,
+  AlertCircle,
+  ChartColumn,
 } from "lucide-react"
 
 interface Stats {
@@ -15,6 +18,9 @@ interface Stats {
   totalDmsSent: number
   activePosts: number
   totalAccounts: number
+  errorCount: number
+  conversionRate: number // DMs / comments * 100
+  successRate: number // delivered / processed * 100
 }
 
 interface RecentComment {
@@ -25,81 +31,205 @@ interface RecentComment {
   created_at: string
 }
 
+interface AccountOption {
+  id: string
+  ig_username: string
+}
+
+interface DayBucket {
+  key: string // YYYY-MM-DD (local)
+  label: string // M/D
+  received: number
+  dms: number
+}
+
+const EMPTY_STATS: Stats = {
+  totalComments: 0,
+  totalDmsSent: 0,
+  activePosts: 0,
+  totalAccounts: 0,
+  errorCount: 0,
+  conversionRate: 0,
+  successRate: 0,
+}
+
+// Statuses that count as "delivered" vs "processed" for the success rate.
+const DELIVERED = ["confirmed", "dm_sent", "done"]
+const PROCESSED = ["replied", "confirmed", "dm_sent", "done", "failed", "error"]
+const ERRORED = ["failed", "error"]
+
+/** Build the last 7 local-day buckets (oldest → newest). */
+function buildLast7Days(): DayBucket[] {
+  const buckets: DayBucket[] = []
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today)
+    d.setDate(d.getDate() - i)
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+    buckets.push({ key, label: `${d.getMonth() + 1}/${d.getDate()}`, received: 0, dms: 0 })
+  }
+  return buckets
+}
+
+/** Local YYYY-MM-DD key for an ISO timestamp. */
+function localDateKey(iso: string | null): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+}
+
 export default function DashboardPage() {
-  const [stats, setStats] = useState<Stats>({
-    totalComments: 0,
-    totalDmsSent: 0,
-    activePosts: 0,
-    totalAccounts: 0,
-  })
+  const [stats, setStats] = useState<Stats>(EMPTY_STATS)
   const [recentComments, setRecentComments] = useState<RecentComment[]>([])
+  const [accounts, setAccounts] = useState<AccountOption[]>([])
+  const [accountId, setAccountId] = useState<string>("all")
+  const [buckets, setBuckets] = useState<DayBucket[]>(buildLast7Days)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    async function fetchDashboardData() {
+    async function loadAccounts() {
       const supabase = createClient()
       try {
-        // Total tracked comments (one conversation per inbound comment)
-        const { count: totalComments } = await supabase
-          .from("conversations")
-          .select("*", { count: "exact", head: true })
-
-        // DMs actually delivered
-        const { count: totalDmsSent } = await supabase
-          .from("conversations")
-          .select("*", { count: "exact", head: true })
-          .not("dm_sent_at", "is", null)
-
-        // Posts with automation enabled
-        const { count: activePosts } = await supabase
-          .from("posts")
-          .select("*", { count: "exact", head: true })
-          .eq("is_active", true)
-
-        // Connected Instagram accounts
-        const { count: totalAccounts } = await supabase
+        const { data } = await supabase
           .from("accounts")
-          .select("*", { count: "exact", head: true })
-
-        setStats({
-          totalComments: totalComments ?? 0,
-          totalDmsSent: totalDmsSent ?? 0,
-          activePosts: activePosts ?? 0,
-          totalAccounts: totalAccounts ?? 0,
-        })
-
-        const { data: conversations } = await supabase
-          .from("conversations")
-          .select("id, username, comment_text, status, created_at")
-          .order("created_at", { ascending: false })
-          .limit(5)
-
-        if (conversations) {
-          setRecentComments(
-            conversations.map((c) => ({
-              id: c.id,
-              username: c.username ?? "",
-              content: c.comment_text ?? "",
-              status: c.status ?? "received",
-              created_at: c.created_at,
-            }))
-          )
-        }
+          .select("id, ig_username")
+          .order("ig_username", { ascending: true })
+        if (data) setAccounts(data as AccountOption[])
       } catch {
-        // Tables may not exist yet — use defaults
-      } finally {
-        setLoading(false)
+        // table may not exist
       }
     }
-
-    fetchDashboardData()
+    loadAccounts()
   }, [])
 
+  const fetchDashboardData = useCallback(async (selectedAccount: string) => {
+    setLoading(true)
+    const supabase = createClient()
+    const filtered = selectedAccount !== "all"
+
+    try {
+      // Total tracked comments (one conversation per inbound comment)
+      let totalQuery = supabase
+        .from("conversations")
+        .select("*", { count: "exact", head: true })
+      if (filtered) totalQuery = totalQuery.eq("account_id", selectedAccount)
+      const { count: totalComments } = await totalQuery
+
+      // DMs actually delivered
+      let dmsQuery = supabase
+        .from("conversations")
+        .select("*", { count: "exact", head: true })
+        .not("dm_sent_at", "is", null)
+      if (filtered) dmsQuery = dmsQuery.eq("account_id", selectedAccount)
+      const { count: totalDmsSent } = await dmsQuery
+
+      // Posts with automation enabled
+      let postsQuery = supabase
+        .from("posts")
+        .select("*", { count: "exact", head: true })
+        .eq("is_active", true)
+      if (filtered) postsQuery = postsQuery.eq("account_id", selectedAccount)
+      const { count: activePosts } = await postsQuery
+
+      // Connected Instagram accounts (always global)
+      const { count: totalAccounts } = await supabase
+        .from("accounts")
+        .select("*", { count: "exact", head: true })
+
+      // Error count (failed / error statuses)
+      let errorQuery = supabase
+        .from("conversations")
+        .select("*", { count: "exact", head: true })
+        .in("status", ERRORED)
+      if (filtered) errorQuery = errorQuery.eq("account_id", selectedAccount)
+      const { count: errorCount } = await errorQuery
+
+      // Success-rate numerator (delivered) and denominator (processed)
+      let deliveredQuery = supabase
+        .from("conversations")
+        .select("*", { count: "exact", head: true })
+        .in("status", DELIVERED)
+      if (filtered) deliveredQuery = deliveredQuery.eq("account_id", selectedAccount)
+      const { count: delivered } = await deliveredQuery
+
+      let processedQuery = supabase
+        .from("conversations")
+        .select("*", { count: "exact", head: true })
+        .in("status", PROCESSED)
+      if (filtered) processedQuery = processedQuery.eq("account_id", selectedAccount)
+      const { count: processed } = await processedQuery
+
+      const tc = totalComments ?? 0
+      const td = totalDmsSent ?? 0
+      setStats({
+        totalComments: tc,
+        totalDmsSent: td,
+        activePosts: activePosts ?? 0,
+        totalAccounts: totalAccounts ?? 0,
+        errorCount: errorCount ?? 0,
+        conversionRate: tc > 0 ? (td / tc) * 100 : 0,
+        successRate: (processed ?? 0) > 0 ? ((delivered ?? 0) / (processed ?? 0)) * 100 : 0,
+      })
+
+      // Recent comments
+      let recentQuery = supabase
+        .from("conversations")
+        .select("id, username, comment_text, status, created_at")
+      if (filtered) recentQuery = recentQuery.eq("account_id", selectedAccount)
+      const { data: conversations } = await recentQuery
+        .order("created_at", { ascending: false })
+        .limit(5)
+      setRecentComments(
+        (conversations ?? []).map((c) => ({
+          id: c.id,
+          username: c.username ?? "",
+          content: c.comment_text ?? "",
+          status: c.status ?? "received",
+          created_at: c.created_at,
+        }))
+      )
+
+      // 7-day activity chart
+      const dayBuckets = buildLast7Days()
+      const startIso = new Date(`${dayBuckets[0].key}T00:00:00`).toISOString()
+      let chartQuery = supabase
+        .from("conversations")
+        .select("created_at, dm_sent_at")
+        .gte("created_at", startIso)
+      if (filtered) chartQuery = chartQuery.eq("account_id", selectedAccount)
+      const { data: chartRows } = await chartQuery
+
+      for (const row of chartRows ?? []) {
+        const k = localDateKey(row.created_at)
+        const b = k ? dayBuckets.find((x) => x.key === k) : undefined
+        if (b) {
+          b.received += 1
+          const dk = localDateKey(row.dm_sent_at)
+          const db = dk ? dayBuckets.find((x) => x.key === dk) : undefined
+          if (db) db.dms += 1
+        }
+      }
+      setBuckets(dayBuckets)
+    } catch {
+      // Tables may not exist yet — keep defaults
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchDashboardData(accountId)
+  }, [accountId, fetchDashboardData])
+
   const statCards = [
-    { label: "Total Comments", value: stats.totalComments, icon: MessageSquare },
-    { label: "DMs Sent", value: stats.totalDmsSent, icon: Send },
-    { label: "Active Posts", value: stats.activePosts, icon: Images },
-    { label: "Connected Accounts", value: stats.totalAccounts, icon: Users },
+    { label: "Total Comments", display: stats.totalComments.toLocaleString(), icon: MessageSquare },
+    { label: "DMs Sent", display: stats.totalDmsSent.toLocaleString(), icon: Send },
+    { label: "Conversion Rate", display: `${stats.conversionRate.toFixed(1)}%`, icon: Percent },
+    { label: "Success Rate", display: `${stats.successRate.toFixed(1)}%`, icon: TrendingUp },
+    { label: "Errors", display: stats.errorCount.toLocaleString(), icon: AlertCircle },
+    { label: "Active Posts", display: stats.activePosts.toLocaleString(), icon: Images },
+    { label: "Connected Accounts", display: stats.totalAccounts.toLocaleString(), icon: Users },
   ]
 
   const formatDate = (dateStr: string) => {
@@ -120,6 +250,12 @@ export default function DashboardPage() {
     return { label: "Received", className: "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400" }
   }
 
+  const chartMax = Math.max(1, ...buckets.map((b) => Math.max(b.received, b.dms)))
+  const chartTotals = buckets.reduce(
+    (acc, b) => ({ received: acc.received + b.received, dms: acc.dms + b.dms }),
+    { received: 0, dms: 0 }
+  )
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -130,6 +266,26 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {/* Account filter */}
+      <div className="flex items-center gap-3">
+        <label htmlFor="account-filter" className="text-sm font-medium text-zinc-600 dark:text-zinc-300">
+          Account
+        </label>
+        <select
+          id="account-filter"
+          value={accountId}
+          onChange={(e) => setAccountId(e.target.value)}
+          className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+        >
+          <option value="all">All accounts</option>
+          {accounts.map((acc) => (
+            <option key={acc.id} value={acc.id}>
+              @{acc.ig_username}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {/* Stat cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {statCards.map((card) => {
@@ -148,11 +304,57 @@ export default function DashboardPage() {
                 </div>
               </div>
               <p className="mt-3 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                {card.value.toLocaleString()}
+                {card.display}
               </p>
             </div>
           )
         })}
+      </div>
+
+      {/* 7-day activity chart */}
+      <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <ChartColumn className="h-5 w-5 text-primary" />
+            <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+              Last 7 Days
+            </h2>
+          </div>
+          <div className="flex items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400">
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-2.5 w-2.5 rounded-sm bg-blue-400" />
+              Received ({chartTotals.received})
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-2.5 w-2.5 rounded-sm bg-primary" />
+              DMs Sent ({chartTotals.dms})
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-end gap-2 sm:gap-3">
+          {buckets.map((b) => {
+            const receivedPct = (b.received / chartMax) * 100
+            const dmPct = (b.dms / chartMax) * 100
+            return (
+              <div key={b.key} className="flex flex-1 flex-col items-center gap-2">
+                <div className="flex h-36 w-full items-end justify-center gap-1">
+                  <div
+                    className="w-2.5 rounded-t bg-blue-400 sm:w-3 dark:bg-blue-500/80"
+                    style={{ height: `${Math.max(receivedPct, b.received > 0 ? 6 : 0)}%` }}
+                    title={`Received: ${b.received}`}
+                  />
+                  <div
+                    className="w-2.5 rounded-t bg-primary sm:w-3"
+                    style={{ height: `${Math.max(dmPct, b.dms > 0 ? 6 : 0)}%` }}
+                    title={`DMs Sent: ${b.dms}`}
+                  />
+                </div>
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">{b.label}</span>
+              </div>
+            )
+          })}
+        </div>
       </div>
 
       {/* Recent activity */}
