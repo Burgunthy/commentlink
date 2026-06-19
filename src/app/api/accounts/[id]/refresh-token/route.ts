@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServiceClient } from '@/lib/supabase/server'
-import { refreshLongLivedToken } from '@/lib/instagram'
+import { refreshAndPersistAccount } from '@/lib/instagram'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -25,8 +25,8 @@ export async function POST(_request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Account not found.' }, { status: 404 })
     }
 
-    const refreshed = await refreshLongLivedToken(account.access_token)
-    if (!refreshed) {
+    const newExpiresAt = await refreshAndPersistAccount(supabase, account)
+    if (!newExpiresAt) {
       return NextResponse.json(
         {
           error:
@@ -34,19 +34,6 @@ export async function POST(_request: NextRequest, context: RouteContext) {
         },
         { status: 502 }
       )
-    }
-
-    const newExpiresAt = new Date(
-      Date.now() + refreshed.expiresInSeconds * 1000
-    ).toISOString()
-
-    const { error: updateError } = await supabase
-      .from('accounts')
-      .update({ access_token: refreshed.accessToken, token_expires_at: newExpiresAt })
-      .eq('id', id)
-
-    if (updateError) {
-      return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
 
     return NextResponse.json({ data: { token_expires_at: newExpiresAt } })

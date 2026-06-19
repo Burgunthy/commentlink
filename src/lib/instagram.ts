@@ -55,6 +55,28 @@ export async function refreshLongLivedToken(
   }
 }
 
+/** Refresh one account's long-lived token and persist it. Returns the new
+ *  expiry ISO string, or null on failure. */
+export async function refreshAndPersistAccount(
+  supabase: SupabaseClient,
+  account: { id: string; access_token: string }
+): Promise<string | null> {
+  const refreshed = await refreshLongLivedToken(account.access_token)
+  if (!refreshed) return null
+  const newExpiresAt = new Date(
+    Date.now() + refreshed.expiresInSeconds * 1000
+  ).toISOString()
+  const { error } = await supabase
+    .from('accounts')
+    .update({ access_token: refreshed.accessToken, token_expires_at: newExpiresAt })
+    .eq('id', account.id)
+  if (error) {
+    console.error('[instagram:error] persist refreshed token:', error.message)
+    return null
+  }
+  return newExpiresAt
+}
+
 /**
  * Ensure the account has a usable access token. If the stored token expires
  * within `withinMs` (default 24h) — or has no recorded expiry — attempt a
