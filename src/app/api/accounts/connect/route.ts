@@ -1,6 +1,77 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { expiryFromTtl } from '@/lib/instagram'
+
+/**
+ * Extract user ID from Supabase JWT stored in httpOnly cookie.
+ * Avoids calling supabase.auth.getSession() which triggers a GoTrue GET request
+ * that returns 405 "Unsupported request - method type: get" in some environments.
+ */
+function getUserIdFromCookie(request: NextRequest): string | null {
+  try {
+    // Supabase stores auth data in a cookie named sb-<ref>-auth-token
+    const cookieName = request.cookies
+      .getAll()
+      .find((c) => c.name.includes('-auth-token'))?.name
+    if (!cookieName) return null
+
+    const cookieValue = request.cookies.get(cookieName)?.value
+    if (!cookieValue) return null
+
+    const parsed = JSON.parse(decodeURIComponent(cookieValue))
+    const accessToken: string | undefined = parsed.access_token
+    if (!accessToken) return null
+
+    // Decode JWT payload (base64url)
+    const parts = accessToken.split('.')
+    if (parts.length !== 3) return null
+
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString())
+    return payload.sub || null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Upsert an Instagram account into Supabase via direct REST API call.
+ * This completely bypasses @supabase/supabase-js and @supabase/ssr to avoid
+ * any internal GoTrue/auth client initialization that could trigger unexpected
+ * GET requests to GoTrue (which returns "Unsupported request - method type: get").
+ *
+ * `on_conflict=ig_id` + `resolution=merge-duplicates` replicates the original
+ * supabase-js `.upsert(data, { onConflict: 'ig_id' })` semantics.
+ */
+async function upsertAccountViaRestApi(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  data: {
+    user_id: string
+    ig_id: string
+    ig_username: string
+    access_token: string
+    token_expires_at?: string
+  }
+): Promise<{ error?: string }> {
+  const url = `${supabaseUrl}/rest/v1/accounts?on_conflict=ig_id`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+      Prefer: 'resolution=merge-duplicates,return=representation',
+    },
+    body: JSON.stringify(data),
+  })
+
+  if (!res.ok) {
+    const body = await res.text()
+    console.error('[connect] REST API upsert failed:', res.status, body)
+    return { error: `DB error ${res.status}: ${body.slice(0, 200)}` }
+  }
+
+  return {}
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -70,26 +141,31 @@ export async function POST(request: NextRequest) {
     const igDetailResp = await fetch(detailUrl)
     const igDetail = await igDetailResp.json()
 
-    // 5. Get current user session
-    const supabase = await createClient()
-    const { data: { session } } = await supabase.auth.getSession()
+    // 5. Get current user ID from JWT cookie (no GoTrue/session call)
+    const userId = getUserIdFromCookie(request)
 
-    if (!session?.user) {
+    if (!userId) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
-    // 6. Save to database
+    // 6. Save to database via direct REST API (no Supabase client, no GoTrue)
     const tokenExpiresAt = expiryFromTtl(expiresIn)
-    const { error: dbError } = await supabase.from('accounts').upsert({
-      user_id: session.user.id,
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    if (!supabaseUrl || !serviceRoleKey) {
+      return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 })
+    }
+
+    const dbResult = await upsertAccountViaRestApi(supabaseUrl, serviceRoleKey, {
+      user_id: userId,
       ig_id: String(igAccount.id),
       ig_username: igDetail.username || igAccount.username || '',
       access_token: longToken,
       ...(tokenExpiresAt ? { token_expires_at: tokenExpiresAt } : {}),
-    }, { onConflict: 'ig_id' })
+    })
 
-    if (dbError) {
-      return NextResponse.json({ error: dbError.message }, { status: 400 })
+    if (dbResult.error) {
+      return NextResponse.json({ error: dbResult.error }, { status: 400 })
     }
 
     return NextResponse.json({
