@@ -4,7 +4,9 @@ import { createServerClient } from '@supabase/ssr'
 const protectedPaths = ['/dashboard']
 
 export async function middleware(request: NextRequest) {
-  const response = NextResponse.next({ request })
+  let supabaseResponse = NextResponse.next({
+    request,
+  })
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,35 +16,46 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll()
         },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            request.cookies.set(name, value)        // forward to downstream handlers
-            response.cookies.set(name, value, options) // persist for the browser
+        setAll(cookiesToSet, headers) {
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value),
+          )
+          supabaseResponse = NextResponse.next({
+            request,
           })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options),
+          )
+          Object.entries(headers).forEach(([key, value]) =>
+            supabaseResponse.headers.set(key, value)
+          )
         },
       },
     },
   )
 
-  // Network-free: reads cookies only, handles base64url + chunking.
-  // getSession() does NOT call GoTrue — only reads from cookie storage.
-  const { data: { session } } = await supabase.auth.getSession()
+  // IMPORTANT: Use getClaims() instead of getSession().
+  // getClaims() validates the JWT locally via WebCrypto — no network call to GoTrue.
+  // getSession() can trigger GoTrue GET requests in some conditions.
+  const { data } = await supabase.auth.getClaims()
+  const user = data?.claims
 
   const { pathname } = request.nextUrl
 
-  // Allow auth routes and public routes
+  // Allow auth routes, public routes, and API routes
   if (pathname.startsWith('/auth') || pathname === '/' || pathname.startsWith('/api')) {
-    return response
+    return supabaseResponse
   }
 
   // Protect dashboard routes
-  if (protectedPaths.some(p => pathname.startsWith(p)) && !session) {
+  if (protectedPaths.some(p => pathname.startsWith(p)) && !user) {
     const redirectUrl = new URL('/auth/login', request.url)
     redirectUrl.searchParams.set('redirectTo', pathname)
     return NextResponse.redirect(redirectUrl)
   }
 
-  return response
+  // IMPORTANT: Always return supabaseResponse to keep cookies in sync
+  return supabaseResponse
 }
 
 export const config = {
