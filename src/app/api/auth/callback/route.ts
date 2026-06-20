@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 
 /**
- * Supabase auth callback handler (Next.js API route convention).
- * Supabase redirects here after OAuth flow completes.
- * Exchanges the auth code for a session and redirects to the app.
+ * Supabase auth callback handler (API route convention).
+ * Exchanges the auth code for a session and sets cookies on the response.
  */
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -13,11 +13,46 @@ export async function GET(request: Request) {
 
   if (code) {
     try {
-      const supabase = await createClient();
+      const cookieStore = await cookies();
+
+      const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          cookies: {
+            getAll() {
+              return cookieStore.getAll();
+            },
+            setAll(cookiesToSet) {
+              try {
+                cookiesToSet.forEach(({ name, value, options }) =>
+                  cookieStore.set(name, value, options)
+                );
+              } catch {
+                // Route Handler — may be read-only; fallback below.
+              }
+            },
+          },
+        }
+      );
+
       const { error } = await supabase.auth.exchangeCodeForSession(code);
 
       if (!error) {
-        return NextResponse.redirect(`${origin}${next}`);
+        const response = NextResponse.redirect(`${origin}${next}`);
+        
+        const allCookies = cookieStore.getAll();
+        const sessionCookie = allCookies.find((c) => c.name.includes("-auth-token"));
+        if (sessionCookie) {
+          response.cookies.set(sessionCookie.name, sessionCookie.value, {
+            path: "/",
+            httpOnly: true,
+            sameSite: "lax",
+            secure: process.env.NODE_ENV === "production",
+          });
+        }
+        
+        return response;
       }
 
       console.error("[API Auth Callback] Error exchanging code:", error.message);

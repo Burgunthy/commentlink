@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 
+/**
+ * Supabase auth callback handler.
+ * GoTrue redirects here after Google OAuth completes.
+ * Exchanges auth code for session and sets cookies on the response.
+ */
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
@@ -8,11 +14,50 @@ export async function GET(request: Request) {
 
   if (code) {
     try {
-      const supabase = await createClient();
+      const cookieStore = await cookies();
+      
+      const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          cookies: {
+            getAll() {
+              return cookieStore.getAll();
+            },
+            setAll(cookiesToSet) {
+              try {
+                cookiesToSet.forEach(({ name, value, options }) =>
+                  cookieStore.set(name, value, options)
+                );
+              } catch {
+                // Route Handler context — cookies().set() may be read-only.
+                // Fallback: we manually set cookies on the response below.
+              }
+            },
+          },
+        }
+      );
+
       const { error } = await supabase.auth.exchangeCodeForSession(code);
 
       if (!error) {
-        return NextResponse.redirect(`${origin}${redirectTo}`);
+        // Build the response
+        const response = NextResponse.redirect(`${origin}${redirectTo}`);
+        
+        // Ensure session cookies are set on the response
+        // (in case cookies().set() silently failed in route handler context)
+        const allCookies = cookieStore.getAll();
+        const sessionCookie = allCookies.find((c) => c.name.includes("-auth-token"));
+        if (sessionCookie) {
+          response.cookies.set(sessionCookie.name, sessionCookie.value, {
+            path: "/",
+            httpOnly: true,
+            sameSite: "lax",
+            secure: process.env.NODE_ENV === "production",
+          });
+        }
+        
+        return response;
       }
 
       console.error("Auth callback error:", error.message);
