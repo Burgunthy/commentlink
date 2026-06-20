@@ -1,59 +1,48 @@
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
+import { createServerClient } from '@supabase/ssr'
 
 const protectedPaths = ['/dashboard']
 
-/**
- * Check if the user has a valid Supabase session by reading the JWT
- * directly from the httpOnly cookie. This avoids creating a Supabase client
- * that would trigger GoTrue GET requests (which cause
- * "Unsupported request - method type: get" errors on Vercel).
- */
-function hasValidSession(request: NextRequest): boolean {
-  try {
-    const cookieName = request.cookies.getAll().find(
-      (c) => c.name.includes('-auth-token')
-    )?.name
-    if (!cookieName) return false
-
-    const cookieValue = request.cookies.get(cookieName)?.value
-    if (!cookieValue) return false
-
-    const parsed = JSON.parse(decodeURIComponent(cookieValue))
-    const accessToken: string | undefined = parsed.access_token
-    if (!accessToken) return false
-
-    const parts = accessToken.split('.')
-    if (parts.length !== 3) return false
-
-    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString())
-    // Check that the token has an expiry and it hasn't expired
-    const exp = payload.exp
-    if (!exp) return false
-    return Date.now() < exp * 1000
-  } catch {
-    return false
-  }
-}
-
 export async function middleware(request: NextRequest) {
+  const response = NextResponse.next({ request })
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            request.cookies.set(name, value)        // forward to downstream handlers
+            response.cookies.set(name, value, options) // persist for the browser
+          })
+        },
+      },
+    },
+  )
+
+  // Network-free: reads cookies only, handles base64url + chunking.
+  // getSession() does NOT call GoTrue — only reads from cookie storage.
+  const { data: { session } } = await supabase.auth.getSession()
+
   const { pathname } = request.nextUrl
 
   // Allow auth routes and public routes
   if (pathname.startsWith('/auth') || pathname === '/' || pathname.startsWith('/api')) {
-    return NextResponse.next({ request })
+    return response
   }
 
   // Protect dashboard routes
-  if (protectedPaths.some(p => pathname.startsWith(p))) {
-    if (!hasValidSession(request)) {
-      const redirectUrl = new URL('/auth/login', request.url)
-      redirectUrl.searchParams.set('redirectTo', pathname)
-      return NextResponse.redirect(redirectUrl)
-    }
+  if (protectedPaths.some(p => pathname.startsWith(p)) && !session) {
+    const redirectUrl = new URL('/auth/login', request.url)
+    redirectUrl.searchParams.set('redirectTo', pathname)
+    return NextResponse.redirect(redirectUrl)
   }
 
-  return NextResponse.next({ request })
+  return response
 }
 
 export const config = {
