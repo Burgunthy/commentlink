@@ -8,6 +8,11 @@ function getEnv(key: string): string {
   return val
 }
 
+function fail(step: string, detail: string, requestUrl: string) {
+  const enc = encodeURIComponent(`[STEP ${step}] ${detail}`.slice(0, 300))
+  return NextResponse.redirect(new URL(`/dashboard/accounts?error=unknown&detail=${enc}`, requestUrl))
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const code = searchParams.get("code")
@@ -46,8 +51,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard/accounts?error=no_code", request.url))
   }
 
+  // --- Step 1: Exchange code for short-lived access token ---
   try {
-    // 1. Exchange code for short-lived access token
     const tokenResp = await fetch("https://api.instagram.com/oauth/access_token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -60,7 +65,6 @@ export async function GET(request: NextRequest) {
       }),
     })
     const tokenData = await tokenResp.json()
-
     const tokenResult = Array.isArray(tokenData.data) ? tokenData.data[0] : tokenData
 
     if (!tokenResp.ok || !tokenResult?.access_token) {
@@ -75,79 +79,93 @@ export async function GET(request: NextRequest) {
     const igUserId = tokenResult.user_id
 
     if (!igUserId) {
-      console.error("[ig callback] No user_id in token response:", JSON.stringify(tokenResult))
-      return NextResponse.redirect(new URL("/dashboard/accounts?error=token_failed&detail=no_user_id", request.url))
+      return NextResponse.redirect(new URL(`/dashboard/accounts?error=token_failed&detail=no_user_id`, request.url))
     }
 
-    // 2. Exchange for long-lived token
-    const longResp = await fetch(
-      `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${APP_SECRET}&access_token=${shortToken}`
-    )
-    const longData = await longResp.json()
-
-    if (!longResp.ok || !longData.access_token) {
-      console.error("[ig callback] Long-lived token exchange failed:", JSON.stringify(longData))
-      const detail = encodeURIComponent(longData.error?.message || JSON.stringify(longData))
-      return NextResponse.redirect(new URL(`/dashboard/accounts?error=token_upgrade_failed&detail=${detail}`, request.url))
-    }
-
-    const longToken = longData.access_token
-    const tokenExpiresAt = expiryFromTtl(longData.expires_in)
-
-    // 3. Get Instagram user details
-    const igDetailResp = await fetch(
-      `https://graph.instagram.com/me?fields=id,username,name,profile_picture_url,account_type&access_token=${longToken}`
-    )
-    const igDetail = await igDetailResp.json()
-
-    if (igDetail.error) {
-      console.error("[ig callback] IG detail failed:", JSON.stringify(igDetail.error))
-      const detail = encodeURIComponent(JSON.stringify(igDetail.error))
-      return NextResponse.redirect(new URL(`/dashboard/accounts?error=no_ig_account&detail=${detail}`, request.url))
-    }
-
-    console.log("[ig callback] IG detail:", igDetail.username, igDetail.id, igDetail.account_type)
-
-    // 4. Get current user session
-    const supabase = await createClient()
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
-
-    if (!session?.user) {
-      console.error("[ig callback] No Supabase session — user not logged in")
-      return NextResponse.redirect(new URL("/auth/login", request.url))
-    }
-
-    // 5. Save to database
-    const { error: dbError } = await supabase.from("accounts").upsert(
-      {
-        user_id: session.user.id,
-        ig_id: String(igUserId),
-        ig_username: igDetail.username || "",
-        access_token: longToken,
-        ...(tokenExpiresAt ? { token_expires_at: tokenExpiresAt } : {}),
-      },
-      { onConflict: "ig_id" }
-    )
-
-    if (dbError) {
-      console.error("[ig callback] DB upsert error:", dbError.message, dbError.details)
-      const detail = encodeURIComponent(
-        `${dbError.message} | details: ${dbError.details || "none"} | code: ${dbError.code || "none"}`
+    // --- Step 2: Exchange for long-lived token ---
+    try {
+      const longResp = await fetch(
+        `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${APP_SECRET}&access_token=${shortToken}`
       )
-      return NextResponse.redirect(new URL(`/dashboard/accounts?error=db_error&detail=${detail}`, request.url))
+      const longData = await longResp.json()
+
+      if (!longResp.ok || !longData.access_token) {
+        console.error("[ig callback] Long-lived token exchange failed:", JSON.stringify(longData))
+        const detail = encodeURIComponent(longData.error?.message || JSON.stringify(longData))
+        return NextResponse.redirect(new URL(`/dashboard/accounts?error=token_upgrade_failed&detail=${detail}`, request.url))
+      }
+
+      const longToken = longData.access_token
+      const tokenExpiresAt = expiryFromTtl(longData.expires_in)
+
+      // --- Step 3: Get Instagram user details ---
+      try {
+        const igDetailResp = await fetch(
+          `https://graph.instagram.com/me?fields=id,username,name,profile_picture_url,account_type&access_token=${longToken}`
+        )
+        const igDetail = await igDetailResp.json()
+
+        if (igDetail.error) {
+          console.error("[ig callback] IG detail failed:", JSON.stringify(igDetail.error))
+          const detail = encodeURIComponent(JSON.stringify(igDetail.error))
+          return NextResponse.redirect(new URL(`/dashboard/accounts?error=no_ig_account&detail=${detail}`, request.url))
+        }
+
+        console.log("[ig callback] IG detail:", igDetail.username, igDetail.id, igDetail.account_type)
+
+        // --- Step 4: Get current user session ---
+        try {
+          const supabase = await createClient()
+          const {
+            data: { session },
+          } = await supabase.auth.getSession()
+
+          if (!session?.user) {
+            console.error("[ig callback] No Supabase session — user not logged in")
+            return NextResponse.redirect(new URL("/auth/login", request.url))
+          }
+
+          // --- Step 5: Save to database ---
+          try {
+            const { error: dbError } = await supabase.from("accounts").upsert(
+              {
+                user_id: session.user.id,
+                ig_id: String(igUserId),
+                ig_username: igDetail.username || "",
+                access_token: longToken,
+                ...(tokenExpiresAt ? { token_expires_at: tokenExpiresAt } : {}),
+              },
+              { onConflict: "ig_id" }
+            )
+
+            if (dbError) {
+              console.error("[ig callback] DB upsert error:", dbError.message, dbError.details)
+              const detail = encodeURIComponent(
+                `${dbError.message} | details: ${dbError.details || "none"} | code: ${dbError.code || "none"}`
+              )
+              return NextResponse.redirect(new URL(`/dashboard/accounts?error=db_error&detail=${detail}`, request.url))
+            }
+
+            console.log("[ig callback] Account saved successfully:", igDetail.username, "for user:", session.user.id)
+            return NextResponse.redirect(new URL("/dashboard/accounts?success=connected", request.url))
+          } catch (err) {
+            console.error("[ig callback] Step 5 (DB upsert) error:", err)
+            return fail("5-DB", err instanceof Error ? err.message : String(err), request.url)
+          }
+        } catch (err) {
+          console.error("[ig callback] Step 4 (Supabase session) error:", err)
+          return fail("4-SESSION", err instanceof Error ? err.message : String(err), request.url)
+        }
+      } catch (err) {
+        console.error("[ig callback] Step 3 (IG detail) error:", err)
+        return fail("3-IG_DETAIL", err instanceof Error ? err.message : String(err), request.url)
+      }
+    } catch (err) {
+      console.error("[ig callback] Step 2 (Long-lived token) error:", err)
+      return fail("2-LONG_TOKEN", err instanceof Error ? err.message : String(err), request.url)
     }
-
-    console.log("[ig callback] Account saved successfully:", igDetail.username, "for user:", session.user.id)
-
-    return NextResponse.redirect(new URL("/dashboard/accounts?success=connected", request.url))
   } catch (err) {
-    console.error("[ig callback] Unexpected error:", err)
-    const message = err instanceof Error ? err.message : String(err)
-    const shortDetail = encodeURIComponent(message.slice(0, 200))
-    return NextResponse.redirect(
-      new URL(`/dashboard/accounts?error=unknown&detail=${shortDetail}`, request.url)
-    )
+    console.error("[ig callback] Step 1 (Token exchange) error:", err)
+    return fail("1-TOKEN_EXCHANGE", err instanceof Error ? err.message : String(err), request.url)
   }
 }
