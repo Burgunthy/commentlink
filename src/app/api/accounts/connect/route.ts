@@ -1,45 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { expiryFromTtl } from '@/lib/instagram'
-
-/**
- * Extract user ID from Supabase JWT stored in httpOnly cookie.
- * Avoids calling supabase.auth.getSession() which triggers a GoTrue GET request
- * that returns 405 "Unsupported request - method type: get" in some environments.
- */
-function getUserIdFromCookie(request: NextRequest): string | null {
-  try {
-    // Supabase stores auth data in a cookie named sb-<ref>-auth-token
-    const cookieName = request.cookies
-      .getAll()
-      .find((c) => c.name.includes('-auth-token'))?.name
-    if (!cookieName) return null
-
-    const cookieValue = request.cookies.get(cookieName)?.value
-    if (!cookieValue) return null
-
-    const parsed = JSON.parse(decodeURIComponent(cookieValue))
-    const accessToken: string | undefined = parsed.access_token
-    if (!accessToken) return null
-
-    // Decode JWT payload (base64url)
-    const parts = accessToken.split('.')
-    if (parts.length !== 3) return null
-
-    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString())
-    return payload.sub || null
-  } catch {
-    return null
-  }
-}
+import { NextRequest, NextResponse } from "next/server"
+import { expiryFromTtl } from "@/lib/instagram"
+import { getUserIdFromCookie } from "@/lib/getUserIdFromCookie"
 
 /**
  * Upsert an Instagram account into Supabase via direct REST API call.
  * This completely bypasses @supabase/supabase-js and @supabase/ssr to avoid
  * any internal GoTrue/auth client initialization that could trigger unexpected
  * GET requests to GoTrue (which returns "Unsupported request - method type: get").
- *
- * `on_conflict=ig_id` + `resolution=merge-duplicates` replicates the original
- * supabase-js `.upsert(data, { onConflict: 'ig_id' })` semantics.
  */
 async function upsertAccountViaRestApi(
   supabaseUrl: string,
@@ -54,19 +21,19 @@ async function upsertAccountViaRestApi(
 ): Promise<{ error?: string }> {
   const url = `${supabaseUrl}/rest/v1/accounts?on_conflict=ig_id`
   const res = await fetch(url, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       apikey: serviceRoleKey,
       Authorization: `Bearer ${serviceRoleKey}`,
-      Prefer: 'resolution=merge-duplicates,return=representation',
+      Prefer: "resolution=merge-duplicates,return=representation",
     },
     body: JSON.stringify(data),
   })
 
   if (!res.ok) {
     const body = await res.text()
-    console.error('[connect] REST API upsert failed:', res.status, body)
+    console.error("[connect] REST API upsert failed:", res.status, body)
     return { error: `DB error ${res.status}: ${body.slice(0, 200)}` }
   }
 
@@ -77,8 +44,8 @@ export async function POST(request: NextRequest) {
   try {
     const { access_token } = await request.json()
 
-    if (!access_token || typeof access_token !== 'string') {
-      return NextResponse.json({ error: 'access_token is required' }, { status: 400 })
+    if (!access_token || typeof access_token !== "string") {
+      return NextResponse.json({ error: "access_token is required" }, { status: 400 })
     }
 
     const token = access_token.trim()
@@ -87,7 +54,7 @@ export async function POST(request: NextRequest) {
     const appId = process.env.META_APP_ID
     const appSecret = process.env.META_APP_SECRET
     if (!appId || !appSecret) {
-      return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 })
+      return NextResponse.json({ error: "Server misconfigured" }, { status: 500 })
     }
 
     // 1. Exchange for long-lived token if short-lived
@@ -99,7 +66,7 @@ export async function POST(request: NextRequest) {
       const exData = await exResp.json()
       if (exData.access_token) {
         longToken = exData.access_token
-        if (typeof exData.expires_in === 'number') expiresIn = exData.expires_in
+        if (typeof exData.expires_in === "number") expiresIn = exData.expires_in
       }
     } catch { /* keep original token */ }
 
@@ -109,13 +76,13 @@ export async function POST(request: NextRequest) {
     const pagesData = await pagesResp.json()
 
     if (!pagesResp.ok) {
-      const msg = pagesData.error?.message || 'unknown error'
+      const msg = pagesData.error?.message || "unknown error"
       return NextResponse.json({ error: `Token validation failed: ${msg}` }, { status: 400 })
     }
 
     if (!pagesData.data?.length) {
       return NextResponse.json(
-        { error: 'No Facebook Pages linked. Please link a Facebook Page with an Instagram Business account.' },
+        { error: "No Facebook Pages linked. Please link a Facebook Page with an Instagram Business account." },
         { status: 400 }
       )
     }
@@ -131,7 +98,7 @@ export async function POST(request: NextRequest) {
 
     if (!igAccount) {
       return NextResponse.json(
-        { error: 'No Instagram Business account found on your Facebook Pages.' },
+        { error: "No Instagram Business account found on your Facebook Pages." },
         { status: 400 }
       )
     }
@@ -145,7 +112,7 @@ export async function POST(request: NextRequest) {
     const userId = getUserIdFromCookie(request)
 
     if (!userId) {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
     }
 
     // 6. Save to database via direct REST API (no Supabase client, no GoTrue)
@@ -153,13 +120,13 @@ export async function POST(request: NextRequest) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
     if (!supabaseUrl || !serviceRoleKey) {
-      return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 })
+      return NextResponse.json({ error: "Server misconfigured" }, { status: 500 })
     }
 
     const dbResult = await upsertAccountViaRestApi(supabaseUrl, serviceRoleKey, {
       user_id: userId,
       ig_id: String(igAccount.id),
-      ig_username: igDetail.username || igAccount.username || '',
+      ig_username: igDetail.username || igAccount.username || "",
       access_token: longToken,
       ...(tokenExpiresAt ? { token_expires_at: tokenExpiresAt } : {}),
     })
@@ -176,7 +143,7 @@ export async function POST(request: NextRequest) {
       }
     }, { status: 201 })
   } catch (err) {
-    console.error('[connect] Unexpected:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    console.error("[connect] Unexpected:", err)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

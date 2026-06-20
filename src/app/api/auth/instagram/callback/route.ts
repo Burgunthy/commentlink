@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { expiryFromTtl } from "@/lib/instagram"
+import { getUserIdFromCookie } from "@/lib/getUserIdFromCookie"
 
 function getEnv(key: string): string {
   const val = process.env[key]
@@ -8,41 +9,8 @@ function getEnv(key: string): string {
 }
 
 /**
- * Extract user ID from Supabase JWT stored in httpOnly cookie.
- * Avoids calling supabase.auth.getSession() which triggers a GoTrue GET request
- * that returns 405 "Unsupported request - method type: get" in some environments.
- */
-function getUserIdFromCookie(request: NextRequest): string | null {
-  try {
-    // Supabase stores auth data in a cookie named sb-<ref>-auth-token
-    const cookieName = request.cookies.getAll().find(
-      (c) => c.name.includes("-auth-token")
-    )?.name
-    if (!cookieName) return null
-
-    const cookieValue = request.cookies.get(cookieName)?.value
-    if (!cookieValue) return null
-
-    const parsed = JSON.parse(decodeURIComponent(cookieValue))
-    const accessToken: string | undefined = parsed.access_token
-    if (!accessToken) return null
-
-    // Decode JWT payload (base64url)
-    const parts = accessToken.split(".")
-    if (parts.length !== 3) return null
-
-    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString())
-    return payload.sub || null
-  } catch {
-    return null
-  }
-}
-
-/**
  * Upsert an Instagram account into Supabase via direct REST API call.
- * This completely bypasses @supabase/supabase-js and @supabase/ssr to avoid
- * any internal GoTrue/auth client initialization that could trigger unexpected
- * GET requests to GoTrue (which returns "Unsupported request - method type: get").
+ * Bypasses @supabase/supabase-js and @supabase/ssr entirely.
  */
 async function upsertAccountViaRestApi(
   supabaseUrl: string,
@@ -181,14 +149,14 @@ export async function GET(request: NextRequest) {
 
     console.log("[ig callback] IG detail:", igDetail.username, igDetail.id, igDetail.account_type)
 
-    // --- Step 4: Get user ID from JWT cookie (no GoTrue call) ---
+    // --- Step 4: Get user ID from JWT cookie (shared util, handles base64url) ---
     const userId = getUserIdFromCookie(request)
     if (!userId) {
       console.error("[ig callback] No user ID in Supabase auth cookie")
       return NextResponse.redirect(new URL("/auth/login", request.url))
     }
 
-    // --- Step 5: Save to database via direct REST API (no Supabase client, no GoTrue) ---
+    // --- Step 5: Save to database via direct REST API ---
     const SUPABASE_URL = getEnv("NEXT_PUBLIC_SUPABASE_URL")
     const SERVICE_ROLE_KEY = getEnv("SUPABASE_SERVICE_ROLE_KEY")
 
