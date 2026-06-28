@@ -18,6 +18,7 @@ import {
   Tag,
   UserCheck,
   UserX,
+  Package,
 } from "lucide-react"
 
 interface Account {
@@ -65,6 +66,13 @@ interface PostKeyword {
   sort_order: number
 }
 
+interface Product {
+  id: string
+  product_name: string
+  affiliate_url: string
+  sort_order: number
+}
+
 interface PostSettingsForm {
   dm_message: string
   dm_link_url: string
@@ -102,6 +110,11 @@ export default function PostsPage() {
   const [newKwLink, setNewKwLink] = useState("")
   const [newKwNotDm, setNewKwNotDm] = useState("")
   const [newKwNotLink, setNewKwNotLink] = useState("")
+
+  // Products (affiliate links)
+  const [products, setProducts] = useState<Product[]>([])
+  const [newProductName, setNewProductName] = useState("")
+  const [newProductUrl, setNewProductUrl] = useState("")
 
   useEffect(() => {
     fetchAccounts()
@@ -246,6 +259,16 @@ export default function PostsPage() {
     } catch {
       // ignore
     }
+    // Fetch products
+    try {
+      const res = await fetch(`/api/posts/${post.id}/products`)
+      if (res.ok) {
+        const json = await res.json()
+        setProducts(json.data || [])
+      }
+    } catch {
+      // ignore
+    }
   }
 
   const saveSettings = async () => {
@@ -313,6 +336,44 @@ export default function PostsPage() {
       })
       if (res.ok) {
         setKeywords((prev) => prev.filter((kw) => kw.id !== id))
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const addProduct = async () => {
+    if (!settingsPost || !newProductName.trim() || !newProductUrl.trim()) return
+    try {
+      const res = await fetch(`/api/posts/${settingsPost.id}/products`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          product_name: newProductName.trim(),
+          affiliate_url: newProductUrl.trim(),
+        }),
+      })
+      const json = await res.json()
+      if (res.ok) {
+        setProducts((prev) => [...prev, json.data])
+        setNewProductName("")
+        setNewProductUrl("")
+      } else {
+        alert(json.error || "제품 추가에 실패했습니다.")
+      }
+    } catch {
+      alert("제품 추가에 실패했습니다.")
+    }
+  }
+
+  const deleteProduct = async (id: string) => {
+    if (!settingsPost) return
+    try {
+      const res = await fetch(`/api/posts/${settingsPost.id}/products/${id}`, {
+        method: "DELETE",
+      })
+      if (res.ok) {
+        setProducts((prev) => prev.filter((p) => p.id !== id))
       }
     } catch {
       // ignore
@@ -701,6 +762,74 @@ export default function PostsPage() {
                     </div>
                   )}
                 </div>
+              </div>
+
+              {/* Divider */}
+              <hr className="border-zinc-200 dark:border-zinc-800" />
+
+              {/* Products (affiliate links) */}
+              <div>
+                <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                  <Package className="h-4 w-4 text-primary" />
+                  제품 링크 (최대 3개)
+                </h3>
+                <p className="mb-3 text-xs text-zinc-400">
+                  DM에 포함할 제휴 링크를 등록하세요. 첫 번째 링크가 자동 발송에 사용됩니다.
+                </p>
+
+                {products.length > 0 && (
+                  <div className="mb-4 space-y-2">
+                    {products.map((p) => (
+                      <div
+                        key={p.id}
+                        className="flex items-start gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-800/50"
+                      >
+                        <Package className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                            {p.product_name}
+                          </p>
+                          <p className="truncate text-xs text-primary">🔗 {p.affiliate_url}</p>
+                        </div>
+                        <button
+                          onClick={() => deleteProduct(p.id)}
+                          className="shrink-0 rounded p-1 text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {products.length < 3 ? (
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <input
+                      type="text"
+                      value={newProductName}
+                      onChange={(e) => setNewProductName(e.target.value)}
+                      placeholder="제품명 (예: 선크림)"
+                      className="flex-1 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                    />
+                    <input
+                      type="url"
+                      value={newProductUrl}
+                      onChange={(e) => setNewProductUrl(e.target.value)}
+                      placeholder="https://..."
+                      className="flex-1 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                    />
+                    <button
+                      onClick={addProduct}
+                      disabled={!newProductName.trim() || !newProductUrl.trim()}
+                      className="flex items-center justify-center gap-1 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-hover disabled:opacity-40"
+                    >
+                      <Plus className="h-4 w-4" />
+                      추가
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-xs text-zinc-400">제품은 게시물당 최대 3개까지 등록할 수 있습니다.</p>
+                )}
               </div>
             </div>
 

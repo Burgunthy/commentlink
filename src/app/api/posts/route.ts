@@ -22,8 +22,9 @@ export async function GET(request: NextRequest) {
         ),
         products (
           id,
-          name,
-          link_url
+          product_name,
+          affiliate_url,
+          sort_order
         )
       `)
       .order('created_at', { ascending: false })

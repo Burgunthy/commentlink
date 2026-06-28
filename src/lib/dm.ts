@@ -32,6 +32,12 @@ export interface PostKeywordRow {
   sort_order: number
 }
 
+export interface ProductLink {
+  product_name: string
+  affiliate_url: string
+  sort_order: number
+}
+
 export interface PostRow {
   id: string
   account_id: string
@@ -43,6 +49,7 @@ export interface PostRow {
   not_following_dm: string | null
   not_following_link: string | null
   accounts: AccountRow
+  products?: ProductLink[] | null
 }
 
 /** Variables that may appear in a settings DM template (`{username}` etc.). */
@@ -61,7 +68,8 @@ export function buildDmMessage(
   account: AccountRow,
   post: PostRow,
   matchedKeyword: PostKeywordRow | undefined,
-  isFollower: boolean
+  isFollower: boolean,
+  products?: ProductLink[] | null
 ): string {
   let dmMessage: string
   let linkUrl: string
@@ -93,7 +101,17 @@ export function buildDmMessage(
       ''
   }
 
-  if (linkUrl && dmMessage) {
+  // Registered products (affiliate links) take precedence over a single linkUrl —
+  // list up to 3 (Instagram's button cap) sorted by sort_order.
+  if (products && products.length > 0) {
+    const linkBlock = products
+      .slice()
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .slice(0, 3)
+      .map((p) => `🔗 ${p.product_name} — ${p.affiliate_url}`)
+      .join('\n')
+    dmMessage = dmMessage ? `${dmMessage}\n\n${linkBlock}` : linkBlock
+  } else if (linkUrl && dmMessage) {
     dmMessage = dmMessage + '\n\n🔗 ' + linkUrl
   }
 

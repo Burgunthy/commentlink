@@ -185,6 +185,7 @@ async function handleComment(supabase: SupabaseClient, value: WebhookCommentValu
     .from('posts')
     .select(
       `id, account_id, media_id, caption, dm_message, dm_link_url, public_reply_text, not_following_dm, not_following_link, ` +
+      `products(id, product_name, affiliate_url, sort_order), ` +
       `accounts!inner(id, user_id, access_token, token_expires_at, ig_username, reply_comment_text, public_reply_enabled, follow_check_enabled, private_reply_text, not_following_text)`
     )
     .eq('media_id', mediaId)
@@ -295,7 +296,7 @@ async function handleComment(supabase: SupabaseClient, value: WebhookCommentValu
   const dmWanted = account.follow_check_enabled || settingsKeywordMatched
   let usedSettingsFallback = false
   if (dmWanted) {
-    let dmMessage = buildDmMessage(account, typedPost, matchedKeyword, isFollower)
+    let dmMessage = buildDmMessage(account, typedPost, matchedKeyword, isFollower, typedPost.products)
 
     if (!dmMessage && settingsKeywordMatched && settings?.dm_template) {
       const permalink = templateNeedsPermalink(settings.dm_template)

@@ -7,6 +7,7 @@ import {
   type AccountRow,
   type PostRow,
   type PostKeywordRow,
+  type ProductLink,
 } from '../dm'
 
 const account: AccountRow = {
@@ -51,6 +52,25 @@ describe('buildDmMessage — priority order', () => {
 
   it('falls back to account.private_reply_text for followers', () => {
     expect(buildDmMessage(account, basePost(), undefined, true)).toBe('기본 DM')
+  })
+
+  it('registered products take precedence over a single linkUrl, sorted by sort_order', () => {
+    const post = { ...basePost(), dm_message: '안내', dm_link_url: 'single-url' }
+    const products: ProductLink[] = [
+      { product_name: '선크림', affiliate_url: 'https://a.com', sort_order: 1 },
+      { product_name: '토너', affiliate_url: 'https://b.com', sort_order: 0 },
+    ]
+    expect(buildDmMessage(account, post, undefined, true, products)).toBe(
+      '안내\n\n🔗 토너 — https://b.com\n🔗 선크림 — https://a.com'
+    )
+  })
+
+  it('caps products at 3 links', () => {
+    const products: ProductLink[] = Array.from({ length: 5 }, (_, i) => ({
+      product_name: `P${i}`, affiliate_url: `https://${i}.com`, sort_order: i,
+    }))
+    const out = buildDmMessage(account, basePost(), undefined, true, products)
+    expect(out.split('\n').filter((l) => l.startsWith('🔗')).length).toBe(3)
   })
 
   it('uses not-following path for non-followers', () => {
