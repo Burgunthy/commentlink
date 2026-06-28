@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { expiryFromTtl } from "@/lib/instagram"
 import { getServerUserId } from "@/lib/auth-user"
 import { upsertAccount } from "@/lib/accounts"
+import { syncAccountPosts } from "@/lib/syncPosts"
 import { getServiceClient } from "@/lib/supabase/server"
 import { canAddAccount } from "@/lib/plan-guard"
 
@@ -160,6 +161,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(
         new URL(`/dashboard/accounts?error=db_error&detail=${detail}`, request.url)
       )
+    }
+
+    // Sync recent media into posts so the webhook can match incoming comments.
+    const { data: accountRow } = await guardClient
+      .from('accounts')
+      .select('id')
+      .eq('ig_id', String(igUserId))
+      .single()
+    if (accountRow) {
+      await syncAccountPosts(guardClient, {
+        id: accountRow.id,
+        access_token: longToken,
+        token_expires_at: tokenExpiresAt ?? null,
+      })
     }
 
     console.log("[ig callback] Account saved:", igDetail.username, "for user:", userId)

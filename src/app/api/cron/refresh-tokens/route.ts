@@ -25,11 +25,15 @@ export async function GET(request: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   const results = await Promise.all(
-    (accounts ?? []).map(async (a) => ({
-      id: a.id,
-      username: a.ig_username,
-      ok: (await refreshAndPersistAccount(supabase, a)) !== null,
-    }))
+    (accounts ?? []).map(async (a) => {
+      const ok = (await refreshAndPersistAccount(supabase, a)) !== null
+      // Track refresh failure so the dashboard can warn about stale tokens.
+      await supabase
+        .from('accounts')
+        .update({ token_refresh_failed_at: ok ? null : new Date().toISOString() })
+        .eq('id', a.id)
+      return { id: a.id, username: a.ig_username, ok }
+    })
   )
 
   const refreshed = results.filter((r) => r.ok).length

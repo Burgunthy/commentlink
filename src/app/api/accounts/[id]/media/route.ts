@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServiceClient } from '@/lib/supabase/server'
+import { ensureFreshToken } from '@/lib/instagram'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -12,7 +13,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     // Get account with access_token
     const { data: account, error: accountError } = await supabase
       .from('accounts')
-      .select('id, ig_username, access_token')
+      .select('id, ig_username, access_token, token_expires_at')
       .eq('id', id)
       .single()
 
@@ -24,11 +25,20 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'No access token. Please reconnect.' }, { status: 400 })
     }
 
-    // Fetch media from Instagram Graph API
-    const fields = 'id,caption,media_type,media_url,thumbnail_url,like_count,timestamp,permalink'
-    const url = `https://graph.instagram.com/v25.0/me/media?fields=${fields}&limit=25&access_token=${account.access_token}`
+    // Decrypt (and refresh if near expiry) the stored token before the API call.
+    const accessToken = await ensureFreshToken(supabase, {
+      id: account.id,
+      access_token: account.access_token,
+      token_expires_at: account.token_expires_at,
+    })
 
-    const response = await fetch(url, {
+    // Fetch media from Instagram Graph API
+    const mediaUrl = new URL('https://graph.instagram.com/v25.0/me/media')
+    mediaUrl.searchParams.set('fields', 'id,caption,media_type,media_url,thumbnail_url,like_count,timestamp,permalink')
+    mediaUrl.searchParams.set('limit', '25')
+    mediaUrl.searchParams.set('access_token', accessToken)
+
+    const response = await fetch(mediaUrl, {
       next: { revalidate: 300 }, // cache for 5 minutes
     })
 
