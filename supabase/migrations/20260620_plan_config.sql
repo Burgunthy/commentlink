@@ -10,8 +10,8 @@ CREATE TABLE IF NOT EXISTS plan_config (
 
 INSERT INTO plan_config (plan, max_accounts, max_dms_per_month, features, display_price) VALUES
     ('free',     1,   100,   '{"keyword_dm": false, "raffle": false, "analytics": "basic"}',     '₩0'),
-    ('pro',      3,   1000,  '{"keyword_dm": true,  "raffle": true,  "analytics": "basic"}',     '₩19,900/월'),
-    ('business', -1,  -1,    '{"keyword_dm": true,  "raffle": true,  "analytics": "detailed"}',   '₩49,900/월')
+    ('pro',      3,   500,   '{"keyword_dm": true,  "raffle": true,  "analytics": "basic"}',     '₩4,900/월'),
+    ('business', -1,  -1,    '{"keyword_dm": true,  "raffle": true,  "analytics": "detailed"}',   '₩14,900/월')
 ON CONFLICT (plan) DO NOTHING;
 
 ALTER TABLE plan_config ENABLE ROW LEVEL SECURITY;
