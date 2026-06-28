@@ -20,8 +20,6 @@ interface Plan {
   dms: string;
   features: Feature[];
   recommended?: boolean;
-  /** Polar product id for paid plans. */
-  productId?: string;
 }
 
 const PLANS: Plan[] = [
@@ -46,7 +44,6 @@ const PLANS: Plan[] = [
     accounts: "3계정",
     dms: "500 DM/월",
     recommended: true,
-    productId: process.env.NEXT_PUBLIC_POLAR_PRO_PRODUCT_ID,
     features: [
       { label: "공개 댓글 답장", included: true },
       { label: "키워드 DM 자동 발송", included: true },
@@ -60,7 +57,6 @@ const PLANS: Plan[] = [
     period: "/월",
     accounts: "무제한 계정",
     dms: "무제한 DM",
-    productId: process.env.NEXT_PUBLIC_POLAR_BUSINESS_PRODUCT_ID,
     features: [
       { label: "공개 댓글 답장", included: true },
       { label: "키워드 DM 자동 발송", included: true },
@@ -76,12 +72,11 @@ export default async function PricingPage() {
   const supabase = await createClient();
   const { data: userRow } = await supabase
     .from("users")
-    .select("plan, email")
+    .select("plan")
     .eq("id", userId)
     .maybeSingle();
 
   const currentPlan = userRow?.plan ?? "free";
-  const email = userRow?.email ?? "";
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -160,12 +155,8 @@ export default async function PricingPage() {
                   <div className="flex w-full items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-sm font-semibold text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-400">
                     현재 요금제
                   </div>
-                ) : plan.productId ? (
-                  <CheckoutButton
-                    productId={plan.productId}
-                    userId={userId}
-                    email={email}
-                  />
+                ) : plan.id !== "free" ? (
+                  <CheckoutButton plan={plan.id} />
                 ) : (
                   <div className="flex w-full items-center justify-center rounded-lg border border-zinc-200 px-4 py-2.5 text-sm font-medium text-zinc-400 dark:border-zinc-700 dark:text-zinc-500">
                     기본 제공
@@ -178,7 +169,7 @@ export default async function PricingPage() {
       </div>
 
       <p className="text-center text-xs text-zinc-400 dark:text-zinc-500">
-        결제는 Polar를 통해 안전하게 처리됩니다. 언제든 구독을 변경하거나 취소할 수 있습니다.
+        결제는 LemonSqueezy를 통해 안전하게 처리됩니다. 언제든 구독을 변경하거나 취소할 수 있습니다.
       </p>
     </div>
   );

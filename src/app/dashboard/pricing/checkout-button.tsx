@@ -1,36 +1,18 @@
 "use client";
 
 interface CheckoutButtonProps {
-  /** Polar product id (NEXT_PUBLIC_POLAR_*_PRODUCT_ID). May be unset in dev. */
-  productId: string | undefined;
-  userId: string;
-  email: string;
+  /** Internal plan name (pro | business). The /checkout route maps it to a variant. */
+  plan: string;
   label?: string;
 }
 
 /**
- * Redirects the browser to the Polar checkout route handler at /checkout,
- * passing the product, customer email and Supabase user id as query params.
- * (The @polar-sh Checkout handler reads `products`, `customerEmail` and
- * `customerExternalId` from the URL.)
+ * Sends the browser to /checkout?plan=…, which builds the LemonSqueezy
+ * checkout server-side (variant id + user identity live on the server).
  */
-export function CheckoutButton({
-  productId,
-  userId,
-  email,
-  label = "결제하기",
-}: CheckoutButtonProps) {
+export function CheckoutButton({ plan, label = "결제하기" }: CheckoutButtonProps) {
   const handleClick = () => {
-    if (!productId) {
-      alert("결제 설정이 완료되지 않았습니다. 잠시 후 다시 시도해주세요.");
-      return;
-    }
-    const params = new URLSearchParams({
-      products: productId,
-      customerEmail: email,
-      customerExternalId: userId,
-    });
-    window.location.href = `/checkout?${params.toString()}`;
+    window.location.href = `/checkout?plan=${encodeURIComponent(plan)}`;
   };
 
   return (
