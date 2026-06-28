@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { decryptToken, encryptToken } from './crypto'
 
 // Instagram Graph API base (matches the version used by the webhook).
 const IG_API_BASE = 'https://graph.instagram.com/v25.0'
@@ -61,14 +62,14 @@ export async function refreshAndPersistAccount(
   supabase: SupabaseClient,
   account: { id: string; access_token: string }
 ): Promise<string | null> {
-  const refreshed = await refreshLongLivedToken(account.access_token)
+  const refreshed = await refreshLongLivedToken(decryptToken(account.access_token))
   if (!refreshed) return null
   const newExpiresAt = new Date(
     Date.now() + refreshed.expiresInSeconds * 1000
   ).toISOString()
   const { error } = await supabase
     .from('accounts')
-    .update({ access_token: refreshed.accessToken, token_expires_at: newExpiresAt })
+    .update({ access_token: encryptToken(refreshed.accessToken), token_expires_at: newExpiresAt })
     .eq('id', account.id)
   if (error) {
     console.error('[instagram:error] persist refreshed token:', error.message)
@@ -92,22 +93,23 @@ export async function ensureFreshToken(
   withinMs = 24 * 60 * 60 * 1000
 ): Promise<string> {
   const now = Date.now()
+  const plaintextToken = decryptToken(account.access_token)
   const expiresAtMs = account.token_expires_at ? Date.parse(account.token_expires_at) : NaN
 
   // Refresh when expiry is unknown or within the threshold.
   const needsRefresh = Number.isNaN(expiresAtMs) || expiresAtMs - now <= withinMs
-  if (!needsRefresh) return account.access_token
+  if (!needsRefresh) return plaintextToken
 
-  const refreshed = await refreshLongLivedToken(account.access_token)
+  const refreshed = await refreshLongLivedToken(plaintextToken)
   if (!refreshed) {
     // Keep the existing token; it may still be valid for this request.
-    return account.access_token
+    return plaintextToken
   }
 
   const newExpiresAt = new Date(now + refreshed.expiresInSeconds * 1000).toISOString()
   const { error } = await supabase
     .from('accounts')
-    .update({ access_token: refreshed.accessToken, token_expires_at: newExpiresAt })
+    .update({ access_token: encryptToken(refreshed.accessToken), token_expires_at: newExpiresAt })
     .eq('id', account.id)
 
   if (error) {

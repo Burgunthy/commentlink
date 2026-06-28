@@ -1,5 +1,5 @@
 -- ============================================================
--- CommentLink — Supabase Auth & RLS Setup
+-- DMify — Supabase Auth & RLS Setup
 -- ============================================================
 --
 -- 이 파일은 Supabase 프로젝트의 SQL Editor에서 실행하세요.

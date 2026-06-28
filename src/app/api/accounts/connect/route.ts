@@ -1,46 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { expiryFromTtl } from "@/lib/instagram"
-import { getUserIdFromCookie } from "@/lib/getUserIdFromCookie"
+import { getServerUserId } from "@/lib/auth-user"
+import { upsertAccount } from "@/lib/accounts"
 import { getServiceClient } from "@/lib/supabase/server"
 import { canAddAccount } from "@/lib/plan-guard"
-
-/**
- * Upsert an Instagram account into Supabase via direct REST API call.
- * This completely bypasses @supabase/supabase-js and @supabase/ssr to avoid
- * any internal GoTrue/auth client initialization that could trigger unexpected
- * GET requests to GoTrue (which returns "Unsupported request - method type: get").
- */
-async function upsertAccountViaRestApi(
-  supabaseUrl: string,
-  serviceRoleKey: string,
-  data: {
-    user_id: string
-    ig_id: string
-    ig_username: string
-    access_token: string
-    token_expires_at?: string
-  }
-): Promise<{ error?: string }> {
-  const url = `${supabaseUrl}/rest/v1/accounts?on_conflict=ig_id`
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: serviceRoleKey,
-      Authorization: `Bearer ${serviceRoleKey}`,
-      Prefer: "resolution=merge-duplicates,return=representation",
-    },
-    body: JSON.stringify(data),
-  })
-
-  if (!res.ok) {
-    const body = await res.text()
-    console.error("[connect] REST API upsert failed:", res.status, body)
-    return { error: `DB error ${res.status}: ${body.slice(0, 200)}` }
-  }
-
-  return {}
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -59,18 +22,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Server misconfigured" }, { status: 500 })
     }
 
-    // 1. Exchange for long-lived token if short-lived
+    // 1. Exchange for long-lived token if short-lived. Build the URL with
+    // searchParams so the token (which may contain URL-special chars like '|')
+    // is encoded safely; a failed exchange falls through to the original token.
     let longToken = token
     let expiresIn: number | null = null
-    try {
-      const exUrl = `https://graph.facebook.com/v25.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${token}`
-      const exResp = await fetch(exUrl)
+    const exUrl = new URL("https://graph.facebook.com/v25.0/oauth/access_token")
+    exUrl.searchParams.set("grant_type", "fb_exchange_token")
+    exUrl.searchParams.set("client_id", appId)
+    exUrl.searchParams.set("client_secret", appSecret)
+    exUrl.searchParams.set("fb_exchange_token", token)
+    const exResp = await fetch(exUrl)
+    if (exResp.ok) {
       const exData = await exResp.json()
       if (exData.access_token) {
         longToken = exData.access_token
         if (typeof exData.expires_in === "number") expiresIn = exData.expires_in
       }
-    } catch { /* keep original token */ }
+    }
 
     // 2. Get Facebook Pages with Instagram Business accounts
     const pagesUrl = `https://graph.facebook.com/v25.0/me/accounts?fields=instagram_business_account{id,username,name,profile_picture_url}&access_token=${longToken}`
@@ -110,8 +79,8 @@ export async function POST(request: NextRequest) {
     const igDetailResp = await fetch(detailUrl)
     const igDetail = await igDetailResp.json()
 
-    // 5. Get current user ID from JWT cookie (no GoTrue/session call)
-    const userId = getUserIdFromCookie(request)
+    // 5. Get current user id via the standard Supabase client.
+    const userId = await getServerUserId()
 
     if (!userId) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
@@ -137,15 +106,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 6. Save to database via direct REST API (no Supabase client, no GoTrue)
+    // 6. Save the account via the service-role client.
     const tokenExpiresAt = expiryFromTtl(expiresIn)
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-    if (!supabaseUrl || !serviceRoleKey) {
-      return NextResponse.json({ error: "Server misconfigured" }, { status: 500 })
-    }
-
-    const dbResult = await upsertAccountViaRestApi(supabaseUrl, serviceRoleKey, {
+    const dbResult = await upsertAccount(guardClient, {
       user_id: userId,
       ig_id: String(igAccount.id),
       ig_username: igDetail.username || igAccount.username || "",

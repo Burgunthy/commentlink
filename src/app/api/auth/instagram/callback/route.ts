@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { expiryFromTtl } from "@/lib/instagram"
-import { getUserIdFromCookie } from "@/lib/getUserIdFromCookie"
+import { getServerUserId } from "@/lib/auth-user"
+import { upsertAccount } from "@/lib/accounts"
 import { getServiceClient } from "@/lib/supabase/server"
 import { canAddAccount } from "@/lib/plan-guard"
 
@@ -8,42 +9,6 @@ function getEnv(key: string): string {
   const val = process.env[key]
   if (!val) throw new Error(`Missing env: ${key}`)
   return val
-}
-
-/**
- * Upsert an Instagram account into Supabase via direct REST API call.
- * Bypasses @supabase/supabase-js and @supabase/ssr entirely.
- */
-async function upsertAccountViaRestApi(
-  supabaseUrl: string,
-  serviceRoleKey: string,
-  data: {
-    user_id: string
-    ig_id: string
-    ig_username: string
-    access_token: string
-    token_expires_at?: string
-  }
-): Promise<{ error?: string }> {
-  const url = `${supabaseUrl}/rest/v1/accounts`
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: serviceRoleKey,
-      Authorization: `Bearer ${serviceRoleKey}`,
-      Prefer: "resolution=merge-duplicates,return=representation",
-    },
-    body: JSON.stringify(data),
-  })
-
-  if (!res.ok) {
-    const body = await res.text()
-    console.error("[ig callback] REST API upsert failed:", res.status, body)
-    return { error: `DB error ${res.status}: ${body.slice(0, 200)}` }
-  }
-
-  return {}
 }
 
 export async function GET(request: NextRequest) {
@@ -151,8 +116,8 @@ export async function GET(request: NextRequest) {
 
     console.log("[ig callback] IG detail:", igDetail.username, igDetail.id, igDetail.account_type)
 
-    // --- Step 4: Get user ID from JWT cookie (shared util, handles base64url) ---
-    const userId = getUserIdFromCookie(request)
+    // --- Step 4: Get user id via the standard Supabase client ---
+    const userId = await getServerUserId()
     if (!userId) {
       console.error("[ig callback] No user ID in Supabase auth cookie")
       return NextResponse.redirect(new URL("/auth/login", request.url))
@@ -181,11 +146,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // --- Step 5: Save to database via direct REST API (no Supabase client, no GoTrue) ---
-    const SUPABASE_URL = getEnv("NEXT_PUBLIC_SUPABASE_URL")
-    const SERVICE_ROLE_KEY = getEnv("SUPABASE_SERVICE_ROLE_KEY")
-
-    const dbResult = await upsertAccountViaRestApi(SUPABASE_URL, SERVICE_ROLE_KEY, {
+    // --- Step 5: Save the account via the service-role client ---
+    const dbResult = await upsertAccount(guardClient, {
       user_id: userId,
       ig_id: String(igUserId),
       ig_username: igDetail.username || "",

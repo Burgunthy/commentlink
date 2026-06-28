@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServiceClient } from '@/lib/supabase/server'
 import { ensureFreshToken } from '@/lib/instagram'
 import { sendInstagramDm } from '@/lib/dm'
+import { canSendDm, incrementDmUsage } from '@/lib/plan-guard'
 
 interface SendBody {
   message?: string
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
 
     const { data: convs, error } = await supabase
       .from('conversations')
-      .select('id, user_igsid, accounts ( id, access_token, token_expires_at )')
+      .select('id, user_igsid, accounts ( id, user_id, access_token, token_expires_at )')
       .in('id', ids)
 
     if (error) {
@@ -40,7 +41,7 @@ export async function POST(request: NextRequest) {
     const rows = (convs ?? []) as unknown as Array<{
       id: string
       user_igsid: string
-      accounts: { id: string; access_token: string; token_expires_at: string | null } | null
+      accounts: { id: string; user_id: string; access_token: string; token_expires_at: string | null } | null
     }>
 
     if (rows.length === 0) {
@@ -66,8 +67,16 @@ export async function POST(request: NextRequest) {
         results.push({ id: row.id, ok: false, error: 'account missing' })
         continue
       }
+      const dmCheck = await canSendDm(supabase, row.accounts.user_id)
+      if (!dmCheck.allowed) {
+        results.push({ id: row.id, ok: false, error: 'plan limit reached' })
+        continue
+      }
       const token = await getAccessToken(row.accounts)
       const res = await sendInstagramDm(token, row.user_igsid, message)
+      if (res.ok) {
+        await incrementDmUsage(supabase, row.accounts.user_id)
+      }
       results.push({ id: row.id, ok: res.ok, error: res.error })
     }
 

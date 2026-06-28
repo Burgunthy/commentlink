@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServiceClient } from '@/lib/supabase/server'
 import { ensureFreshToken } from '@/lib/instagram'
+import { canSendDm, incrementDmUsage } from '@/lib/plan-guard'
 import {
   buildDmMessage,
   buildPublicReply,
@@ -184,7 +185,7 @@ async function handleComment(supabase: SupabaseClient, value: WebhookCommentValu
     .from('posts')
     .select(
       `id, account_id, media_id, caption, dm_message, dm_link_url, public_reply_text, not_following_dm, not_following_link, ` +
-      `accounts!inner(id, access_token, token_expires_at, ig_username, reply_comment_text, public_reply_enabled, follow_check_enabled, private_reply_text, not_following_text)`
+      `accounts!inner(id, user_id, access_token, token_expires_at, ig_username, reply_comment_text, public_reply_enabled, follow_check_enabled, private_reply_text, not_following_text)`
     )
     .eq('media_id', mediaId)
     .eq('is_active', true)
@@ -310,28 +311,38 @@ async function handleComment(supabase: SupabaseClient, value: WebhookCommentValu
     }
 
     if (dmMessage) {
-      try {
-        const dmRes = await igApi(
-          'me/messages',
-          { access_token: accessToken },
-          'POST',
-          {
-            recipient: { id: igUserId },
-            message: { text: dmMessage },
-          }
+      // Enforce the account owner's monthly DM limit before sending.
+      const dmCheck = await canSendDm(supabase, account.user_id)
+      if (!dmCheck.allowed) {
+        console.warn(
+          `[webhook] DM skipped — plan limit reached for user ${account.user_id}: ${dmCheck.used}/${dmCheck.limit}`
         )
+        await markFailed(supabase, commentId, `dm: plan limit ${dmCheck.used}/${dmCheck.limit}`)
+      } else {
+        try {
+          const dmRes = await igApi(
+            'me/messages',
+            { access_token: accessToken },
+            'POST',
+            {
+              recipient: { id: igUserId },
+              message: { text: dmMessage },
+            }
+          )
 
-        if (dmRes?.error) {
-          console.error('[webhook:error] DM rejected:', JSON.stringify(dmRes.error))
-          await markFailed(supabase, commentId, `dm: ${dmRes.error.message ?? 'unknown'}`)
-        } else {
-          await supabase.from('conversations')
-            .update({ status: 'confirmed', dm_sent_at: nowIso })
-            .eq('comment_id', commentId)
+          if (dmRes?.error) {
+            console.error('[webhook:error] DM rejected:', JSON.stringify(dmRes.error))
+            await markFailed(supabase, commentId, `dm: ${dmRes.error.message ?? 'unknown'}`)
+          } else {
+            await supabase.from('conversations')
+              .update({ status: 'confirmed', dm_sent_at: nowIso })
+              .eq('comment_id', commentId)
+            await incrementDmUsage(supabase, account.user_id)
+          }
+        } catch (err) {
+          console.error('[webhook:error] DM threw:', err)
+          await markFailed(supabase, commentId, `dm: ${String(err)}`)
         }
-      } catch (err) {
-        console.error('[webhook:error] DM threw:', err)
-        await markFailed(supabase, commentId, `dm: ${String(err)}`)
       }
     }
   }

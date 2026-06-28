@@ -11,6 +11,7 @@ const IG_API_BASE = 'https://graph.instagram.com/v25.0'
 
 export interface AccountRow {
   id: string
+  user_id: string
   access_token: string
   token_expires_at: string | null
   ig_username: string

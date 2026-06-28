@@ -54,6 +54,25 @@ export async function canSendDm(
 }
 
 /**
+ * Atomically increment the user's monthly DM-sent counter via the `increment_dms`
+ * RPC (INSERT … ON CONFLICT DO UPDATE). Best-effort: logs on failure but does
+ * not throw, so it cannot break the webhook response.
+ */
+export async function incrementDmUsage(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<void> {
+  const month = new Date().toISOString().slice(0, 7); // "YYYY-MM"
+  const { error } = await supabase.rpc("increment_dms", {
+    p_user_id: userId,
+    p_month: month,
+  });
+  if (error) {
+    console.error("[plan-guard] increment_dms failed:", error.message);
+  }
+}
+
+/**
  * Check whether the user can add another Instagram account under their plan.
  * Returns { allowed, reason?, count, limit }.
  * A limit of -1 means unlimited.

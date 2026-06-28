@@ -7,6 +7,7 @@ import {
   type AccountRow,
   type PostRow,
 } from '@/lib/dm'
+import { canSendDm, incrementDmUsage } from '@/lib/plan-guard'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -36,7 +37,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
       .select(
         `id, user_igsid, username, is_following, status,
          posts ( id, account_id, media_id, caption, dm_message, dm_link_url, public_reply_text, not_following_dm, not_following_link ),
-         accounts ( id, access_token, token_expires_at, ig_username, reply_comment_text, public_reply_enabled, follow_check_enabled, private_reply_text, not_following_text )`
+         accounts ( id, user_id, access_token, token_expires_at, ig_username, reply_comment_text, public_reply_enabled, follow_check_enabled, private_reply_text, not_following_text )`
       )
       .eq('id', id)
       .single()
@@ -78,6 +79,14 @@ export async function POST(_request: NextRequest, context: RouteContext) {
       token_expires_at: account.token_expires_at,
     })
 
+    const dmCheck = await canSendDm(supabase, account.user_id)
+    if (!dmCheck.allowed) {
+      return NextResponse.json(
+        { error: `월간 DM 한도에 도달했습니다 (${dmCheck.used}/${dmCheck.limit}).` },
+        { status: 402 }
+      )
+    }
+
     const result = await sendInstagramDm(accessToken, conversation.user_igsid, dmMessage)
     if (!result.ok) {
       // Persist the failure reason so it surfaces in the history detail view.
@@ -93,6 +102,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
       .from('conversations')
       .update({ status: 'dm_sent', dm_sent_at: nowIso, error_message: null })
       .eq('id', id)
+    await incrementDmUsage(supabase, account.user_id)
 
     return NextResponse.json({ data: { status: 'dm_sent', dm_sent_at: nowIso } })
   } catch (err) {
