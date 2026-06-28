@@ -1,8 +1,16 @@
-export type Lang = 'en' | 'ko';
+export type Lang = 'en' | 'ko' | 'ja';
+
+export const SUPPORTED_LANGS: Lang[] = ['en', 'ko', 'ja'];
+
+export const LANG_LABELS: Record<Lang, string> = {
+  en: 'English',
+  ko: '한국어',
+  ja: '日本語',
+};
 
 export const translations: Record<Lang, Record<string, string>> = {
   en: {
-    // Nav
+    // Nav (landing)
     'nav.features': 'Features',
     'nav.howItWorks': 'How It Works',
     'nav.pricing': 'Pricing',
@@ -65,10 +73,20 @@ export const translations: Record<Lang, Record<string, string>> = {
     'footer.copyright': '© 2026 DMify. All rights reserved.',
     'footer.terms': 'Terms of Service',
     'footer.privacy': 'Privacy Policy',
+
+    // Dashboard nav
+    'dash.nav.dashboard': 'Dashboard',
+    'dash.nav.history': 'History',
+    'dash.nav.pricing': 'Pricing',
+    'dash.nav.posts': 'Posts',
+    'dash.nav.accounts': 'Accounts',
+    'dash.nav.raffle': 'Raffle',
+    'dash.nav.settings': 'Settings',
+    'dash.nav.signout': 'Sign Out',
   },
 
   ko: {
-    // Nav
+    // Nav (landing)
     'nav.features': '기능',
     'nav.howItWorks': '이용 방법',
     'nav.pricing': '요금제',
@@ -131,5 +149,91 @@ export const translations: Record<Lang, Record<string, string>> = {
     'footer.copyright': '© 2026 DMify. All rights reserved.',
     'footer.terms': '이용약관',
     'footer.privacy': '개인정보 처리방침',
+
+    // Dashboard nav
+    'dash.nav.dashboard': '대시보드',
+    'dash.nav.history': '히스토리',
+    'dash.nav.pricing': '요금제',
+    'dash.nav.posts': '게시물',
+    'dash.nav.accounts': '계정',
+    'dash.nav.raffle': '래플',
+    'dash.nav.settings': '설정',
+    'dash.nav.signout': '로그아웃',
+  },
+
+  ja: {
+    // Nav (landing)
+    'nav.features': '機能',
+    'nav.howItWorks': '使い方',
+    'nav.pricing': '料金',
+    'nav.getStarted': '始める',
+
+    // Hero
+    'hero.badge': 'Instagram Graph API v25',
+    'hero.headline.1': 'Instagramのコメントを',
+    'hero.headline.2': 'に変える',
+    'hero.headline.highlight': 'アフィリエイト収益',
+    'hero.subtitle.1': 'コメント自動返信 → フォロー確認 → DMでアフィリエイトリンク送信。',
+    'hero.subtitle.2': '手作業なしで24時間自動化されたインフルエンサーマーケティング。',
+    'hero.cta.primary': '無料で始める →',
+    'hero.cta.secondary': '使い方を見る',
+    'hero.stat.autoReplies': '自動返信',
+    'hero.stat.avgResponse': '平均応答',
+    'hero.stat.accountLinks': 'アカウント連携',
+
+    // Features
+    'features.title': 'コア機能',
+    'features.subtitle': 'Instagramビジネスを自動化するために必要なすべてのツール',
+    'features.autoReply.title': 'コメント自動返信',
+    'features.autoReply.desc': '新しいコメントが投稿されたら、 presetメッセージで即座に返信します。ランディングページURLも対応。',
+    'features.followVerify.title': 'フォロー認証DM',
+    'features.followVerify.desc': 'コメント投稿者に自動でDMを送信します。フォロー認証ボタンでフォロワーに転換しましょう。',
+    'features.affiliate.title': 'アフィリエイトリンク管理',
+    'features.affiliate.desc': '商品ごとにアフィリエイトリンクを登録すると、DMに自動挿入されます。コンバージョン率も追跡可能。',
+
+    // How It Works
+    'howItWorks.title': '使い方',
+    'howItWorks.subtitle': '3ステップで自動収益パイプラインを構築',
+    'howItWorks.step1.title': 'Instagramを連携',
+    'howItWorks.step1.desc': 'Meta BusinessアカウントとInstagramプロフィールを連携してください。',
+    'howItWorks.step2.title': '自動返信を設定',
+    'howItWorks.step2.desc': 'コメント返信テンプレートとDMメッセージを書いてください。',
+    'howItWorks.step3.title': 'アフィリエイトリンクを追加',
+    'howItWorks.step3.desc': '商品のアフィリエイトリンクを登録すると、DMに自動的に含まれます。',
+
+    // Pricing
+    'pricing.title': 'シンプルな料金',
+    'pricing.subtitle': '30日間無料で開始。いつでもキャンセル可能。',
+    'pricing.badge': '30日間無料',
+    'pricing.planName': 'DMify',
+    'pricing.perMonth': '/月',
+    'pricing.billed': '無料体験後に月額請求',
+    'pricing.feature1': '複数のInstagramアカウント',
+    'pricing.feature2': '無制限の投稿',
+    'pricing.feature3': 'アフィリエイトリンク付き自動DM',
+    'pricing.feature4': 'コメント自動返信',
+    'pricing.feature5': 'フォロー認証',
+    'pricing.feature6': '分析ダッシュボード',
+    'pricing.cta': '無料体験を開始',
+
+    // CTA
+    'cta.headline': '今日から自動化を始めよう',
+    'cta.subtitle': '5分でセットアップ完了。クレジットカード不要で無料開始。',
+    'cta.button': '無料で始める →',
+
+    // Footer
+    'footer.copyright': '© 2026 DMify. All rights reserved.',
+    'footer.terms': '利用規約',
+    'footer.privacy': 'プライバシーポリシー',
+
+    // Dashboard nav
+    'dash.nav.dashboard': 'ダッシュボード',
+    'dash.nav.history': '履歴',
+    'dash.nav.pricing': '料金',
+    'dash.nav.posts': '投稿',
+    'dash.nav.accounts': 'アカウント',
+    'dash.nav.raffle': 'プレゼント',
+    'dash.nav.settings': '設定',
+    'dash.nav.signout': 'ログアウト',
   },
 };

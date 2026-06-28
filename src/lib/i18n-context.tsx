@@ -39,7 +39,7 @@ function getServerSnapshot(): Lang {
 function readStoredLang(): Lang {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === 'ko' || stored === 'en') return stored;
+    if (stored === 'ko' || stored === 'en' || stored === 'ja') return stored;
   } catch {}
   return DEFAULT_LANG;
 }

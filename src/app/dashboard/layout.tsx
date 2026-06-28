@@ -17,15 +17,17 @@ import {
 } from "lucide-react"
 import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { useI18n } from "@/lib/i18n-context"
+import { LanguageSwitcher } from "@/components/LanguageSwitcher"
 
 const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/dashboard/history", label: "History", icon: MessagesSquare },
-  { href: "/dashboard/pricing", label: "Pricing", icon: CreditCard },
-  { href: "/dashboard/posts", label: "Posts", icon: Image },
-  { href: "/dashboard/accounts", label: "Accounts", icon: Users },
-  { href: "/dashboard/raffle", label: "Raffle", icon: Gift },
-  { href: "/dashboard/settings", label: "Settings", icon: Settings },
+  { href: "/dashboard", labelKey: "dash.nav.dashboard", icon: LayoutDashboard },
+  { href: "/dashboard/history", labelKey: "dash.nav.history", icon: MessagesSquare },
+  { href: "/dashboard/pricing", labelKey: "dash.nav.pricing", icon: CreditCard },
+  { href: "/dashboard/posts", labelKey: "dash.nav.posts", icon: Image },
+  { href: "/dashboard/accounts", labelKey: "dash.nav.accounts", icon: Users },
+  { href: "/dashboard/raffle", labelKey: "dash.nav.raffle", icon: Gift },
+  { href: "/dashboard/settings", labelKey: "dash.nav.settings", icon: Settings },
 ]
 
 export default function DashboardLayout({
@@ -33,6 +35,7 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
+  const { t } = useI18n()
   const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -99,7 +102,7 @@ export default function DashboardLayout({
                 `}
               >
                 <Icon className="h-5 w-5 shrink-0" />
-                {item.label}
+                {t(item.labelKey)}
               </Link>
             )
           })}
@@ -112,7 +115,7 @@ export default function DashboardLayout({
             className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-text transition-colors duration-150 hover:bg-white/5 hover:text-white"
           >
             <LogOut className="h-5 w-5 shrink-0" />
-            Sign Out
+            {t("dash.nav.signout")}
           </button>
         </div>
       </aside>
@@ -128,8 +131,11 @@ export default function DashboardLayout({
             <Menu className="h-5 w-5" />
           </button>
           <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-            {navItems.find((item) => isActive(item.href))?.label ?? "Dashboard"}
+            {t(navItems.find((item) => isActive(item.href))?.labelKey ?? "dash.nav.dashboard")}
           </h1>
+          <div className="ml-auto">
+            <LanguageSwitcher />
+          </div>
         </header>
 
         {/* Page content */}

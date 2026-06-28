@@ -1,6 +1,6 @@
 'use client';
 
-import { I18nProvider, useI18n } from '@/lib/i18n-context';
+import { useI18n } from '@/lib/i18n-context';
 
 function LandingPageContent() {
   const { lang, setLang, t } = useI18n();
@@ -45,6 +45,16 @@ function LandingPageContent() {
                 }`}
               >
                 KR
+              </button>
+              <button
+                onClick={() => setLang('ja')}
+                className={`px-2.5 py-1 transition-colors ${
+                  lang === 'ja'
+                    ? 'bg-primary text-white'
+                    : 'bg-transparent text-muted hover:text-foreground'
+                }`}
+              >
+                JP
               </button>
             </div>
             <a
@@ -269,9 +279,5 @@ function LandingPageContent() {
 }
 
 export default function Home() {
-  return (
-    <I18nProvider>
-      <LandingPageContent />
-    </I18nProvider>
-  );
+  return <LandingPageContent />;
 }
